@@ -34,7 +34,7 @@ Nenhum registro de produção foi excluído. O seed legado continua explícito e
 | Dark mode | Implementado, mas não validado visualmente | Tokens e superfícies atualizados; revisão de contraste e dispositivos pendente |
 | Sidebar e header | Parcialmente implementado | Agrupamento, menu móvel, recolhimento e busca global implementados |
 | Administração | Implementado e validado na API | Cadastro, edição e desativação de usuários, cadastro e edição de setores e CLI de bootstrap |
-| Render | Parcialmente implementado | Blueprint validado contra o esquema oficial; variáveis e publicação pendentes |
+| Vercel | Implementado, mas não publicado | Configurações separadas para API FastAPI e frontend Vite; variáveis, migração Neon e publicação pendentes |
 | Testes de frontend | Parcialmente implementado | Lint, typecheck e build passaram; navegação e câmera aguardam homologação |
 | Uploads | Pendente | Nenhum endpoint de upload foi exposto |
 

@@ -1,48 +1,67 @@
-# Preparação para Render e Neon
+# Deploy na Vercel
 
-**Ainda não publicado.** Não sincronize o Blueprint sem revisar os requisitos pendentes em [relatório de versão](docs/RELEASE_1_0_2.md).
+O IndusTrack usa dois projetos Vercel no mesmo repositório.
 
-## Configuração
+- API FastAPI, com Root Directory `backend`
+- Frontend React/Vite, com Root Directory `frontend`
+- Banco PostgreSQL externo no Neon
 
-A raiz Git é a pasta `industrack`; nela está `render.yaml`. O backend utiliza Web Service Python, o frontend usa Static Site. O banco é externo no Neon. As publicações automáticas ficam desligadas.
+## API
 
-No backend, configure pelo ambiente:
+Crie um projeto Vercel apontando para o repositório e defina `backend` como **Root Directory**. O arquivo `backend/vercel.json` configura a função Python. A Vercel detecta `app/main.py` como a aplicação FastAPI.
 
-- `DATABASE_URL`: conexão PostgreSQL do Neon com `sslmode=require` ou validação de certificado mais estrita; não versionar.
-- `JWT_SECRET_KEY`: segredo aleatório com pelo menos 32 caracteres.
-- `ENVIRONMENT=production`.
-- `FRONTEND_URL`: domínio HTTPS definitivo do frontend, sem query, fragmento ou credenciais.
-- `CORS_ORIGINS`: origens HTTPS permitidas, separadas por vírgula.
+Configure estas variáveis no ambiente Production da API:
 
-No frontend, configure `VITE_API_URL` com a origem HTTPS da API, sem `/api`. Essa variável é incorporada no build. O proxy `/api` existe somente no desenvolvimento.
+```dotenv
+DATABASE_URL=postgresql://USUARIO:SENHA@HOST/neondb?sslmode=require
+JWT_SECRET_KEY=SEGREDO_ALEATORIO_COM_PELO_MENOS_32_CARACTERES
+ENVIRONMENT=production
+FRONTEND_URL=https://SEU-FRONTEND.vercel.app
+CORS_ORIGINS=https://SEU-FRONTEND.vercel.app
+```
 
-## Migrações e contas
-
-Após testar em um banco de homologação, revisar o backup e autorizar a aplicação, execute na pasta backend:
+Depois do primeiro deploy, execute com as variáveis de produção carregadas:
 
 ```bash
 alembic upgrade head
 python -m app.create_admin
 ```
 
-A conta administrativa é criada interativamente, com senha própria. Não executar seed em produção; o código bloqueia essa operação. O processo de startup em produção não modifica o esquema. A migração deve ser concluída antes da primeira inicialização. O Blueprint não aplica migrações automaticamente. No primeiro deploy, configure os domínios previstos ou reservados antes de inicializar a API. Faça o bootstrap do banco com as variáveis de produção carregadas no ambiente do comando.
+O arquivo `.env` e a senha do banco nunca devem ser enviados ao Git.
 
-As migrações adotam o esquema original e acrescentam identificadores, planos, notificações, auditoria e prazo de ordem de serviço. Elas não transferem dados SQLite para Neon: uma transferência exige procedimento separado, conferência de chaves e contagem dos registros. Não descarte o banco local.
+## Frontend
 
-## Inicialização
+Crie um segundo projeto Vercel usando o mesmo repositório e defina `frontend` como **Root Directory**. O arquivo `frontend/vercel.json` executa o build e redireciona as rotas do React Router para `index.html`.
 
-Backend: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-Frontend: `npm ci && npm run build`; diretório publicado: `dist`; fallback de navegação: `/index.html`.
-Health check: `/health` verifica a conexão ao banco, sem revelar credenciais. Ele não substitui a validação de login ou das migrações.
+Configure no ambiente Production:
 
-## Etiquetas e câmera
+```dotenv
+VITE_API_URL=https://SEU-BACKEND.vercel.app
+```
 
-Defina o domínio público definitivo antes de imprimir. Sem configuração HTTPS válida, o endpoint de QR retorna 503 e explica o requisito. Os identificadores persistem entre reinicializações; mudar o domínio exige preservar o domínio anterior ou redirecioná-lo para não invalidar etiquetas antigas.
+O valor deve ser apenas a origem pública da API, sem `/api` no final.
 
-A câmera precisa de permissão e contexto seguro. A leitura aceita apenas URLs da mesma origem da aplicação e identificadores UUID válidos, confirmados pela API autenticada.
+## Publicação pelo painel
 
-## Verificação antes da publicação
+1. Faça commit e push das alterações para o GitHub.
+2. Acesse [vercel.com/new](https://vercel.com/new).
+3. Importe o repositório `projeto-integrador`.
+4. Crie o projeto da API com Root Directory `backend`.
+5. Adicione as cinco variáveis da API.
+6. Faça o deploy e teste `https://SEU-BACKEND.vercel.app/health`.
+7. Crie o projeto do frontend com Root Directory `frontend`.
+8. Configure `VITE_API_URL` com a URL da API.
+9. Faça o deploy do frontend.
+10. Volte à API e ajuste `FRONTEND_URL` e `CORS_ORIGINS` para o domínio final do frontend.
 
-Valide migrações em PostgreSQL de homologação, autenticação, isolamento por perfil, QR em um celular, download e impressão, navegação direta após login, CSV, preventivas e notificações. Confira todos os itens do relatório de versão antes de considerar produção pronta.
+## Validação local
 
-O arquivo foi validado contra o esquema JSON oficial. Referência: [Blueprint YAML Reference do Render](https://render.com/docs/blueprint-spec). A configuração local não provisiona serviços. Planos e custos devem ser escolhidos antes da criação.
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run build
+```
+
+A Vercel executa a API como uma Vercel Function Python. Migrações devem ser aplicadas antes do primeiro uso e não ficam no startup da função em produção.

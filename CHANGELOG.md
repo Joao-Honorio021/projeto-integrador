@@ -11,6 +11,6 @@
 - Notificações individuais de chamado, atribuição e conclusão; leitura individual e coletiva.
 - Exportação CSV de chamados com período e proteção contra fórmulas.
 - Tokens visuais escuros e novas rotas respeitando os perfis.
-- Health check e Blueprint Render sem banco adicional ou publicação automática.
+- Health check e configuração de deploy na Vercel para a API e o frontend.
 
 A versão ainda não atende integralmente aos critérios de produção. Consulte docs/RELEASE_1_0_2.md.
