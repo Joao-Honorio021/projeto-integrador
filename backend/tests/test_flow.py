@@ -18,7 +18,7 @@ def client():
         from app.database import engine
         assert Path(engine.url.database).name == 'test.db'
         with Session.begin() as db:
-            for table in ['historico', 'ordens', 'chamados', 'equipamentos', 'setores', 'usuarios', 'seed_versions']:
+            for table in ['auditoria', 'execucoes', 'preventivas', 'notificacoes', 'historico', 'ordens', 'chamados', 'equipamentos', 'setores', 'usuarios', 'seed_versions']:
                 db.execute(text(f'DELETE FROM {table}'))
         seed()
         yield c
@@ -115,3 +115,108 @@ def test_order_and_history_rollback_together(client, monkeypatch):
     with Session() as db:
         assert db.execute(text('SELECT status FROM ordens WHERE id = 7')).scalar_one() == 'Pendente'
         assert db.execute(text('SELECT status FROM chamados WHERE id = 7')).scalar_one() == 'Em análise'
+
+
+def test_qr_identity_and_access(client, monkeypatch):
+    from app.services import equipment
+    from app.database import initialize_database
+    operator=auth(client,'operador')
+    before=client.get('/equipamentos',headers=operator).json()
+    assert len({e['public_id'] for e in before})==len(before)
+    initialize_database()
+    after=client.get('/equipamentos',headers=operator).json()
+    assert [e['public_id'] for e in before]==[e['public_id'] for e in after]
+    id=before[0]['public_id']
+    assert client.get('/equipamentos/'+id,headers=operator).json()['id']==before[0]['id']
+    monkeypatch.setattr(equipment,'FRONTEND_URL','http://localhost:5173')
+    assert client.get(f'/equipamentos/{id}/qrcode',headers=operator).status_code==503
+    monkeypatch.setattr(equipment,'FRONTEND_URL','https://industrial.example.org')
+    image=client.get(f'/equipamentos/{id}/qrcode',headers=operator)
+    assert image.status_code==200 and image.content.startswith(b'\x89PNG')
+    assert client.get(f'/equipamentos/{id}/qrcode').status_code in (401,403)
+    assert client.patch('/equipamentos/'+id,headers=operator,json={'status':'Inativo'}).status_code==403
+
+
+def test_preventive_notifications_report(client):
+    supervisor=auth(client,'supervisor'); tech=auth(client,'tecnico'); operator=auth(client,'operador')
+    body={'equipamento_id':1,'responsavel_id':3,'atividade':'Inspecionar conexões','frequencia_dias':30,'proxima_execucao':'2026-01-01'}
+    assert client.post('/manutencoes',headers=operator,json=body).status_code==403
+    response=client.post('/manutencoes',headers=supervisor,json=body)
+    assert response.status_code==201
+    id=response.json()['id']
+    assert client.post(f'/manutencoes/{id}/executar',headers=auth(client,'tecnico2'),json={'mensagem':'Inspeção concluída'}).status_code==403
+    assert client.post(f'/manutencoes/{id}/executar',headers=tech,json={'mensagem':'Inspeção concluída'}).status_code==200
+    assert len(client.get(f'/manutencoes/{id}/historico',headers=tech).json())==1
+    notifications=client.get('/notificacoes',headers=tech).json()
+    assert len(notifications)==1
+    nid=notifications[0]['id']
+    assert client.patch(f'/notificacoes/{nid}/ler',headers=operator).status_code==404
+    assert client.patch(f'/notificacoes/{nid}/ler',headers=tech).status_code==200
+    assert client.get('/relatorios/chamados.csv',headers=operator).status_code==403
+    assert 'Título' in client.get('/relatorios/chamados.csv',headers=supervisor).text
+    assert client.get('/health').status_code==200
+
+
+def test_admin_access_and_audit(client):
+    admin=auth(client,'admin'); supervisor=auth(client,'supervisor')
+    body={'nome':'Nova Pessoa','email':'nova@example.org','senha':'long-temporary-password','perfil':'tecnico'}
+    assert client.post('/usuarios',headers=supervisor,json=body).status_code==403
+    response=client.post('/usuarios',headers=admin,json=body);assert response.status_code==201
+    uid=response.json()['id'];assert 'senha_hash' not in response.json()
+    assert client.patch(f'/usuarios/{uid}',headers=admin,json={'nome':'Nova Pessoa','perfil':'operador','ativo':False}).status_code==200
+    assert client.patch('/usuarios/1',headers=admin,json={'nome':'Admin','perfil':'operador','ativo':True}).status_code==409
+    assert client.post('/setores',headers=admin,json={'nome':'Novo setor'}).status_code==201
+    assert client.patch('/equipamentos/1',headers=admin,json={'descricao':'Inspeção necessária','status':'Inativo'}).status_code==200
+    assert client.get('/equipamentos/1/auditoria',headers=admin).json()[-1]['tipo']=='alteracao'
+
+
+def test_insights_scopes_and_exports(client):
+    supervisor=auth(client,'supervisor'); operator=auth(client,'operador2')
+    insights=client.get('/dashboard/operacional',headers=operator)
+    assert insights.status_code==200
+    assert sum(r['quantidade'] for r in insights.json()['chamados_mes'])==5
+    assert insights.json()['proximas_preventivas']==[]
+    # Um operador não deve encontrar chamado de outro solicitante pela busca global.
+    with Session() as db:
+        ticket=db.execute(text('SELECT id,titulo FROM chamados WHERE solicitante_id!=7 LIMIT 1')).mappings().one()
+    result=client.get('/busca',headers=operator,params={'q':'CH-'+str(ticket['id'])}).json()
+    assert not any(r['destino']=='/chamados/'+str(ticket['id']) for r in result)
+    for kind in ['chamados','ordens-concluidas','equipamentos-falhas','preventivas-atrasadas','historico-equipamento']:
+        assert client.get('/relatorios/'+kind+'.csv',headers=operator).status_code==403
+        response=client.get('/relatorios/'+kind+'.csv',headers=supervisor,params={'equipamento_id':1})
+        assert response.status_code==200 and 'text/csv' in response.headers['content-type']
+        assert client.get('/relatorios/'+kind+'.csv',headers=supervisor,params={'inicio':'2026-12-01','fim':'2026-01-01'}).status_code==422
+    result=client.get('/relatorios/chamados.csv',headers=supervisor,params={'equipamento_id':999})
+    assert len(result.text.splitlines())==1
+
+
+def test_reminders_are_deduplicated(client):
+    from datetime import date,timedelta
+    supervisor=auth(client,'supervisor');tech=auth(client,'tecnico');other=auth(client,'tecnico2')
+    response=client.post('/manutencoes',headers=supervisor,json={'equipamento_id':1,'responsavel_id':3,'atividade':'Preventiva vencida','frequencia_dias':30,'proxima_execucao':(date.today()-timedelta(days=2)).isoformat()})
+    assert response.status_code==201
+    first=client.get('/notificacoes',headers=tech).json()
+    second=client.get('/notificacoes',headers=tech).json()
+    assert len(first)==len(second)==2
+    assert any('atrasada' in n['mensagem'] for n in first)
+    assert client.get('/notificacoes/contador',headers=tech).json()['nao_lidas']==2
+    assert client.get('/notificacoes',headers=other).json()==[]
+    assert client.patch('/notificacoes/ler-todas',headers=tech).status_code==200
+    assert client.get('/notificacoes/contador',headers=tech).json()['nao_lidas']==0
+
+
+def test_edit_cancel_and_deadline(client):
+    supervisor=auth(client,'supervisor');tech=auth(client,'tecnico');operator=auth(client,'operador')
+    ticket=client.post('/chamados',headers=operator,json={'titulo':'Falha nova','descricao':'Descrição detalhada','equipamento_id':1}).json()
+    tid=ticket['id'];edit={'titulo':'Título corrigido','descricao':'Descrição corrigida'}
+    assert client.patch(f'/chamados/{tid}',headers=operator,json=edit).status_code==200
+    assert client.patch(f'/chamados/{tid}/atribuir',headers=supervisor,json={'tecnico_id':3}).status_code==200
+    oid=client.post('/ordens-servico',headers=supervisor,json={'chamado_id':tid}).json()['id']
+    assert client.patch(f'/ordens-servico/{oid}/prazo',headers=tech,json={'prazo':'2027-01-01'}).status_code==403
+    assert client.patch(f'/ordens-servico/{oid}/prazo',headers=supervisor,json={'prazo':'2027-01-01'}).status_code==200
+    assert client.patch(f'/ordens-servico/{oid}/iniciar',headers=tech).status_code==200
+    assert client.patch(f'/ordens-servico/{oid}/diagnostico',headers=tech,json={'diagnostico':'Componente avariado'}).status_code==200
+    assert client.patch(f'/ordens-servico/{oid}/cancelar',headers=tech,json={'mensagem':'Motivo'}).status_code==403
+    assert client.patch(f'/ordens-servico/{oid}/cancelar',headers=supervisor,json={'mensagem':'Equipamento será substituído'}).status_code==200
+    assert client.get(f'/chamados/{tid}',headers=operator).json()['status']=='Cancelado'
+    assert client.patch(f'/ordens-servico/{oid}/iniciar',headers=tech).status_code==409

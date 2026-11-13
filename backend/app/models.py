@@ -1,3 +1,4 @@
+from uuid import uuid4
 from datetime import datetime, timezone
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,6 +23,9 @@ class Sector(Base):
 
 class Equipment(Base):
     __tablename__ = 'equipamentos'
+    public_id: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid4()), unique=True)
+    descricao: Mapped[str | None]
+    criado_em: Mapped[str | None] = mapped_column(default=now)
     id: Mapped[int] = mapped_column(primary_key=True)
     codigo: Mapped[str] = mapped_column(unique=True)
     nome: Mapped[str]
@@ -56,6 +60,7 @@ class Order(Base):
     diagnostico: Mapped[str] = mapped_column(default='')
     solucao: Mapped[str] = mapped_column(default='')
     criado_em: Mapped[str] = mapped_column(default=now)
+    prazo: Mapped[str | None]
     inicio: Mapped[str | None]
     conclusao: Mapped[str | None]
 

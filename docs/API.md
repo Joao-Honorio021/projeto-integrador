@@ -106,3 +106,18 @@ A conclusão exige ordem em execução. O servidor registra a data, resolve o ch
 Erros de negócio usam o campo `detail`. Erros de validação podem retornar uma lista de campos nesse mesmo atributo. A resposta a uma requisição sem token é controlada pelo componente HTTP Bearer do FastAPI.
 
 As rotas desta página correspondem à implementação atual. Módulos previstos, como preventivas e anexos, não possuem endpoints nesta versão.
+
+## Novas rotas da versão 1.0.2 em desenvolvimento
+
+- `GET /health`: conexão ao banco.
+- `GET /equipamentos/{identificador}`: aceita ID interno ou UUID público.
+- `PATCH /equipamentos/{identificador}`: edição administrativa.
+- `GET /equipamentos/{identificador}/qrcode`: PNG autenticado, exige domínio HTTPS.
+- `GET /equipamentos/{identificador}/ordens`: ordens acessíveis do equipamento.
+- `GET` e `POST /manutencoes`: lista e cadastro de planos.
+- `POST /manutencoes/{id}/executar`: execução e reagendamento; corpo `mensagem`.
+- `GET /manutencoes/{id}/historico`: execuções acessíveis.
+- `GET /notificacoes`, `PATCH /notificacoes/{id}/ler`, `PATCH /notificacoes/ler-todas`: notificações do usuário.
+- `GET /relatorios/chamados.csv?inicio=AAAA-MM-DD&fim=AAAA-MM-DD`: exportação autorizada.
+
+Consulte [a matriz de requisitos](RELEASE_1_0_2.md) para limites de validação e funcionalidades incompletas.

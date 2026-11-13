@@ -33,8 +33,8 @@ def insert(db, model, **values):
             values[key] = default.arg(None) if default.is_callable else default.arg
     names = ', '.join(values)
     placeholders = ', '.join(':' + key for key in values)
-    result = db.execute(text(f'INSERT INTO {name} ({names}) VALUES ({placeholders})'), values)
-    return find(db, model, values.get('id', result.lastrowid))
+    result = db.execute(text(f'INSERT INTO {name} ({names}) VALUES ({placeholders}) RETURNING id'), values)
+    return find(db, model, result.scalar_one())
 
 def save(db, obj):
     name = table(type(obj))
@@ -51,14 +51,14 @@ def access(user):
 
 def ticket_page(db, user, q, status, priority, equipment_id, technician_id, page):
     scope, params = access(user)
-    params.update(q=q, status=status, priority=priority, equipment_id=equipment_id,
+    params.update(q=q, pattern='%' + q.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%', status=status, priority=priority, equipment_id=equipment_id,
                   technician_id=technician_id, offset=(max(page, 1)-1)*20)
     filters = scope + """
-        AND (:q = '' OR instr(lower(t.titulo), lower(:q)) > 0 OR CAST(t.id AS TEXT) = :q)
+        AND (:q = '' OR lower(t.titulo) LIKE lower(:pattern) ESCAPE '!' OR CAST(t.id AS TEXT) = :q)
         AND (:status = '' OR t.status = :status)
         AND (:priority = '' OR t.prioridade = :priority)
-        AND (:equipment_id IS NULL OR t.equipamento_id = :equipment_id)
-        AND (:technician_id IS NULL OR t.tecnico_id = :technician_id)
+        AND (CAST(:equipment_id AS INTEGER) IS NULL OR t.equipamento_id = :equipment_id)
+        AND (CAST(:technician_id AS INTEGER) IS NULL OR t.tecnico_id = :technician_id)
     """
     total = db.execute(text('SELECT COUNT(*) FROM chamados t WHERE ' + filters), params).scalar_one()
     result = db.execute(text('SELECT t.* FROM chamados t WHERE ' + filters +

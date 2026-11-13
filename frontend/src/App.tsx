@@ -1,12 +1,19 @@
+import { AppShell } from './components/AppShell';
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { NavLink, Routes, Route, Link } from 'react-router-dom';
-import { Factory, LayoutDashboard, Headphones, Wrench, Box, LogOut } from 'lucide-react';
+import { Routes, Route, Link } from 'react-router-dom';
+import { Factory } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { api, error } from './services/api';
 import { Loading } from './components/Feedback';
 import type { User } from './types/domain';
+const Admin = lazy(() => import('./pages/Admin'));
+const Preventives = lazy(() => import('./pages/Preventives'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Scanner = lazy(() => import('./pages/Scanner'));
+const EquipmentDetail = lazy(() => import('./pages/EquipmentDetail'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Tickets = lazy(() => import('./pages/Tickets'));
 const Detail = lazy(() => import('./pages/Detail'));
@@ -25,8 +32,4 @@ else
     }
     catch (e) {
         setErr(error(e));
-    } })}><label>E-mail<input autoComplete="username" type="email" {...register('email')}/></label><small>{errors.email?.message}</small><label>Senha<input autoComplete="current-password" type="password" {...register('senha')}/></label>{err && <p className="error" role="alert">{err}</p>}<button disabled={isSubmitting}>{isSubmitting ? 'Entrando…' : 'Entrar na plataforma'}</button></form></article></div>; return <div className="shell"><a className="skip-link" href="#conteudo">Pular para o conteúdo</a><aside><div className="brand"><Factory /> IndusTrack</div><small>GESTÃO INDUSTRIAL</small><nav>{([['/', 'Dashboard', LayoutDashboard], ['/chamados', 'Central de suporte', Headphones], ['/ordens', 'Ordens de serviço', Wrench], ['/equipamentos', 'Equipamentos', Box]] satisfies [
-    string,
-    string,
-    typeof Box
-][]).map(([path, title, Icon]) => <NavLink end={path === '/'} key={path} to={path}><Icon size={19}/>{title}</NavLink>)}</nav><div className="sidebar-foot">SUPORTE & MANUTENÇÃO<small>Projeto Integrador · SENAI</small></div></aside><div className="workspace"><header><span>GESTÃO DE ATIVOS / CENTRAL DE OPERAÇÕES</span><span className="avatar">{user.nome.split(" ").map(n => n[0]).slice(0, 2).join("")}</span><div><b>{user.nome}</b><small>{user.perfil}</small></div><button className="logout" aria-label="Sair" onClick={() => { sessionStorage.removeItem('token'); setUser(null); }}><LogOut size={18}/></button></header><main id="conteudo"><Suspense fallback={<Loading />}><Routes><Route path="/" element={<Dashboard />}/><Route path="/chamados" element={<Tickets />}/><Route path="/chamados/:id" element={<Detail user={user}/>}/><Route path="/ordens" element={<Orders user={user}/>}/><Route path="/equipamentos" element={<Equipments user={user}/>}/><Route path="*" element={<p>Página não encontrada. <Link to="/">Voltar ao painel</Link></p>}/></Routes></Suspense></main></div></div>; }
+    } })}><label>E-mail<input autoComplete="username" type="email" {...register('email')}/></label><small>{errors.email?.message}</small><label>Senha<input autoComplete="current-password" type="password" {...register('senha')}/></label>{err && <p className="error" role="alert">{err}</p>}<button disabled={isSubmitting}>{isSubmitting ? 'Entrando…' : 'Entrar na plataforma'}</button></form></article></div>; return <AppShell user={user} onLogout={()=>{sessionStorage.removeItem('token');setUser(null)}}><Suspense fallback={<Loading />}><Routes><Route path="/usuarios" element={user.perfil==="administrador"?<Admin kind="usuarios"/>:<p>Acesso restrito</p>}/><Route path="/setores" element={user.perfil==="administrador"?<Admin kind="setores"/>:<p>Acesso restrito</p>}/><Route path="/" element={<Dashboard />}/><Route path="/chamados" element={<Tickets />}/><Route path="/chamados/:id" element={<Detail user={user}/>}/><Route path="/ordens" element={<Orders user={user}/>}/><Route path="/preventivas" element={user.perfil!=="operador"?<Preventives user={user}/>:<p>Acesso restrito</p>}/><Route path="/notificacoes" element={<Notifications/>}/><Route path="/relatorios" element={["administrador","supervisor"].includes(user.perfil)?<Reports/>:<p>Acesso restrito</p>}/><Route path="/scanner" element={<Scanner/>}/><Route path="/equipamentos/:identifier" element={<EquipmentDetail user={user}/>}/><Route path="/equipamentos" element={<Equipments user={user}/>}/><Route path="*" element={<p>Página não encontrada. <Link to="/">Voltar ao painel</Link></p>}/></Routes></Suspense></AppShell>; }

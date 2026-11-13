@@ -5,7 +5,7 @@ from ..database import db_session
 from ..core.security import current, allow
 from ..models import User, Equipment, Ticket
 from ..repositories.sql_repository import insert, save, ticket_page
-from ..schemas import TicketInput, Assign, Comment
+from ..schemas import TicketInput, Assign, Comment, TicketPatch
 from ..views.serializers import public
 from ..services.support import get, ticket, log
 router = APIRouter(tags=["Chamados"])
@@ -21,6 +21,8 @@ def create_ticket(data: TicketInput, u=Depends(current), db=Depends(db_session))
         raise HTTPException(409, 'Equipamento inativo')
     t = insert(db, Ticket, **data.model_dump(), solicitante_id=u.id)
     log(db, t, u, 'Chamado aberto')
+    from ..services.notifications import managers
+    managers(db, f'Novo chamado CH-{t.id}: {t.titulo}', f'/chamados/{t.id}')
     db.commit()
     return public(t)
 
@@ -43,6 +45,8 @@ def assign(id: int, data: Assign, u=Depends(current), db=Depends(db_session)):
     t.status = 'Em análise'
     save(db, t)
     log(db, t, u, f'Atribuído a {tech.nome}. Prioridade: {t.prioridade}')
+    from ..services.notifications import notify
+    notify(db, tech.id, f'Chamado CH-{id} atribuído', f'/chamados/{id}')
     db.commit()
     return public(t)
 
@@ -52,3 +56,22 @@ def comment(id: int, data: Comment, u=Depends(current), db=Depends(db_session)):
     log(db, t, u, data.mensagem, 'comentario')
     db.commit()
     return {'ok': True}
+
+@router.patch('/chamados/{id}')
+def edit_ticket(id: int, data: TicketPatch, u=Depends(current), db=Depends(db_session)):
+    t = ticket(db, id, u)
+    if t.status != 'Aberto' or (u.perfil not in ('administrador','supervisor') and t.solicitante_id != u.id):
+        raise HTTPException(409, 'Edição permitida apenas antes da análise, pelo solicitante ou gestor')
+    t.titulo, t.descricao = data.titulo, data.descricao
+    save(db,t);log(db,t,u,'Título e descrição atualizados');db.commit();return public(t)
+
+@router.patch('/chamados/{id}/cancelar')
+def cancel_ticket(id: int, data: Comment, u=Depends(current), db=Depends(db_session)):
+    allow(u,['administrador','supervisor'])
+    t=ticket(db,id,u)
+    if t.status in ('Resolvido','Cancelado') or order_for_ticket(db,id):
+        raise HTTPException(409,'Chamado encerrado ou com OS; cancele pela ordem de serviço quando aplicável')
+    t.status='Cancelado';save(db,t);log(db,t,u,'Chamado cancelado: '+data.mensagem)
+    from ..services.notifications import notify
+    notify(db,t.solicitante_id,f'Chamado CH-{id} cancelado',f'/chamados/{id}')
+    db.commit();return public(t)

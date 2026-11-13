@@ -11,6 +11,11 @@ export interface Sector {
     nome: string;
 }
 export interface Equipment {
+    public_id: string;
+    modelo: string;
+    fabricante: string;
+    descricao: string | null;
+    criticidade: string;
     id: number;
     codigo: string;
     nome: string;
@@ -51,6 +56,7 @@ export interface Order {
     status: string;
     diagnostico: string;
     solucao: string;
+    prazo: string | null;
     inicio: string | null;
     conclusao: string | null;
 }

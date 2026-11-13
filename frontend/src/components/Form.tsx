@@ -12,6 +12,10 @@ interface Field {
     area?: boolean;
     type?: string;
     minLength?: number;
+    maxLength?: number;
+    required?: boolean;
+    min?: number;
+    max?: number;
 }
 export function Form({ fields, onSave, label = 'Salvar' }: {
     fields: Field[];
@@ -29,7 +33,7 @@ export function Form({ fields, onSave, label = 'Salvar' }: {
             setErr('');
             setSuccess('');
             try {
-                await onSave(values);
+                if (await onSave(values) === false) return;
                 form.reset();
                 setSuccess('Salvo com sucesso.');
             }
@@ -40,6 +44,6 @@ export function Form({ fields, onSave, label = 'Salvar' }: {
                 setBusy(false);
             }
         }}><fieldset disabled={busy}>{fields.map(field => <label key={field.name}>{field.label}
- {field.options ? <select key={`${field.name}-${field.options.length}-${field.value ?? ""}`} name={field.name} required defaultValue={field.value || ''}><option value="">Selecione</option>{field.options.map(option => <option key={typeof option === 'string' ? option : option.id} value={typeof option === 'string' ? option : option.id}>{typeof option === 'string' ? option : option.nome}</option>)}</select> : field.area ? <textarea name={field.name} required minLength={field.minLength ?? 3} maxLength={10000}/> : <input name={field.name} type={field.type || 'text'} required minLength={field.type === 'number' ? undefined : field.minLength ?? 3}/>}
+ {field.options ? <select key={`${field.name}-${field.options.length}-${field.value ?? ""}`} name={field.name} required={field.required ?? true} defaultValue={field.value || ''}><option value="">Selecione</option>{field.options.map(option => <option key={typeof option === 'string' ? option : option.id} value={typeof option === 'string' ? option : option.id}>{typeof option === 'string' ? option : option.nome}</option>)}</select> : field.area ? <textarea name={field.name} defaultValue={field.value} required={field.required ?? true} minLength={field.minLength ?? (field.required === false ? 0 : 3)} maxLength={field.maxLength ?? 10000}/> : <input name={field.name} defaultValue={field.value} type={field.type || 'text'} required={field.required ?? true} min={field.min} max={field.max} maxLength={field.maxLength} minLength={field.type === 'number' ? undefined : field.minLength ?? (field.required === false ? 0 : 3)}/>}
  </label>)}{err && <p role="alert" className="error">{err}</p>}{success && <p role="status" className="success">{success}</p>}<button disabled={busy}>{busy ? 'Salvando…' : label}</button></fieldset></form>;
 }

@@ -8,6 +8,9 @@ from .core.security import password_hash
 VERSION = 'demo-mvc-v1'
 
 def seed():
+    from .core.config import ENVIRONMENT
+    if ENVIRONMENT == 'production':
+        raise RuntimeError('Carga demonstrativa bloqueada em produção')
     initialize_database()
     with Session.begin() as db:
         if db.execute(text('SELECT 1 FROM seed_versions WHERE version = :version'), {'version': VERSION}).scalar():
@@ -24,6 +27,9 @@ def seed():
         for statement in script.split(';'):
             if statement.strip():
                 db.execute(text(statement), params)
+        from uuid import uuid4
+        for id in db.execute(text('SELECT id FROM equipamentos WHERE public_id IS NULL')).scalars():
+            db.execute(text('UPDATE equipamentos SET public_id=:value WHERE id=:id'), {'value': str(uuid4()), 'id': id})
         db.execute(text('INSERT INTO seed_versions (version, aplicado_em) VALUES (:version, :data)'),
                    {'version': VERSION, 'data': reference.isoformat()})
     return 'Demonstração criada: 8 usuários, 3 setores, 8 equipamentos, 15 chamados e 8 ordens.'

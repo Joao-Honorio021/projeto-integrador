@@ -92,3 +92,11 @@ Formulários, badges e estados de carregamento, erro e ausência de dados são c
 - Preparar migrações explícitas ao modificar colunas existentes.
 
 Consulte [instalação](INSTALACAO.md) para executar as verificações e [escopo](ESCOPO.md) para as funcionalidades ainda planejadas.
+
+## Evolução 1.0.2
+
+`migrations` introduz Alembic e a adoção incremental do esquema legado. A conexão seleciona SQLite ou PostgreSQL com psycopg por `DATABASE_URL`. Produção exige SSL e não cria tabelas no startup. Os UUIDs são gerados no servidor e persistidos em equipamentos.
+
+`services/equipment.py` resolve identificadores e constrói a URL pública de QR. `controllers/operations.py` contém preventivas, notificações e CSV. `services/notifications.py` grava eventos na transação do atendimento. As telas novas usam o mesmo cliente autenticado e não simulam registros.
+
+Esta evolução ainda precisa de homologação PostgreSQL e de interface; o relatório `RELEASE_1_0_2.md` prevalece sobre a descrição do escopo anterior.

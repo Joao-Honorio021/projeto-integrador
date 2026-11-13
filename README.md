@@ -67,3 +67,13 @@ Consulte o [índice em docs](docs/README.md) para instalação detalhada, arquit
 
 - Na pasta `backend`, com o ambiente virtual ativo: `python -m pytest -q`.
 - Na pasta `frontend`: `npm run build`.
+
+## Versão 1.0.2 em desenvolvimento
+
+A evolução inclui migrações Alembic, suporte a Neon PostgreSQL, QR Code, detalhes de equipamentos, preventivas, notificações, CSV e tema escuro. A versão ainda não está liberada para produção.
+
+- [Relatório e matriz de requisitos](docs/RELEASE_1_0_2.md)
+- [Preparação para publicação](DEPLOY.md)
+- [Histórico de alterações](CHANGELOG.md)
+
+Para atualizar o banco local, faça uma cópia de segurança e execute `alembic upgrade head` na pasta backend com o ambiente virtual ativo. Em produção, migrações são explícitas e o seed é bloqueado. Os guias históricos devem ser lidos em conjunto com o relatório da versão.

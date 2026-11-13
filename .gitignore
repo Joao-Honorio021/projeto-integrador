@@ -6,3 +6,11 @@ dist/
 __pycache__/
 .pytest_cache/
 *.tsbuildinfo
+
+.env.*
+!.env.example
+*.db-wal
+*.db-shm
+
+# Arquivos temporários do editor de documentos
+.~lock.*#

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 from ..database import db_session
 from ..core.security import current
-from ..schemas import OrderInput, Complete
+from ..schemas import OrderInput, Complete, Diagnosis, Deadline, Comment
 from ..services import orders as service
 
 router = APIRouter(tags=['Ordens de serviço'])
@@ -26,3 +26,15 @@ def pause(id: int, u=Depends(current), db=Depends(db_session)):
 @router.patch('/ordens-servico/{id}/concluir')
 def complete(id: int, data: Complete, u=Depends(current), db=Depends(db_session)):
     return service.complete(id, data, u, db)
+
+@router.patch('/ordens-servico/{id}/diagnostico')
+def diagnose(id:int,data:Diagnosis,u=Depends(current),db=Depends(db_session)):
+    return service.diagnose(id,data,u,db)
+
+@router.patch('/ordens-servico/{id}/prazo')
+def deadline(id:int,data:Deadline,u=Depends(current),db=Depends(db_session)):
+    return service.deadline(id,data,u,db)
+
+@router.patch('/ordens-servico/{id}/cancelar')
+def cancel(id:int,data:Comment,u=Depends(current),db=Depends(db_session)):
+    return service.cancel(id,data,u,db)
