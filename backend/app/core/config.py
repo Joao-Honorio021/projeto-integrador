@@ -20,8 +20,7 @@ if ENVIRONMENT != 'production' and len(JWT_SECRET) < 32:
     )
 CORS_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ORIGINS', FRONTEND_URL).split(',') if origin.strip()]
 EPHEMERAL_SQLITE = (
-    os.getenv('VERCEL', '').lower() in ('1', 'true')
-    and os.getenv('ALLOW_EPHEMERAL_SQLITE', '').lower() == 'true'
+    os.getenv('ALLOW_EPHEMERAL_SQLITE', '').lower() == 'true'
     and DATABASE_URL.startswith('sqlite:////tmp/')
 )
 
