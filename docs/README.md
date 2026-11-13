@@ -7,6 +7,7 @@ O IndusTrack organiza o atendimento de ocorrências em equipamentos industriais,
 | Documento | Conteúdo |
 |---|---|
 | [Instalação](INSTALACAO.md) | Ambiente, configuração, execução, testes e problemas comuns |
+| [Deploy na Vercel](../DEPLOY.md) | Publicação conjunta da interface e API usando SQLite temporário |
 | [Guia de uso](GUIA_DE_USO.md) | Perfis, contas demonstrativas e fluxo de atendimento |
 | [Arquitetura](ARCHITECTURE.md) | Organização MVC e responsabilidades do código |
 | [Banco de dados](BANCO_DE_DADOS.md) | Entidades, relacionamentos, SQL e dados mockados |

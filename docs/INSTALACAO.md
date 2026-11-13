@@ -28,11 +28,11 @@ cp .env.example .env
 python -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Cole o valor gerado em `JWT_SECRET` no `.env`. Não sobrescreva uma configuração existente ao atualizar o projeto.
+Para manter as sessões após reiniciar a API, cole o valor gerado em `JWT_SECRET_KEY` no `.env`. Em desenvolvimento, se o segredo estiver vazio ou tiver menos de 32 caracteres, a API gera um segredo temporário automaticamente; nesse caso, as sessões são invalidadas ao reiniciar. Em produção, configure sempre um segredo próprio com pelo menos 32 caracteres.
 
 | Variável | Finalidade |
 |---|---|
-| `JWT_SECRET` | Segredo de assinatura dos tokens; a API exige pelo menos 32 caracteres |
+| `JWT_SECRET_KEY` | Segredo de assinatura dos tokens; obrigatório em produção e recomendado localmente |
 | `DATABASE_URL` | Endereço do SQLite; o exemplo usa `sqlite:///./industrack.db` |
 | `FRONTEND_URL` | Origem autorizada para acesso direto à API via CORS |
 

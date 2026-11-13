@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from .database import initialize_database
-from .core.config import FRONTEND_URL, CORS_ORIGINS, ENVIRONMENT
+from .core.config import FRONTEND_URL, CORS_ORIGINS, ENVIRONMENT, EPHEMERAL_SQLITE
 from .core.security import SECRET
 from .controllers import auth, catalog, tickets, orders, dashboard, operations, insights, admin
 
@@ -30,6 +30,9 @@ async def lifespan(app):
         raise RuntimeError('Configure JWT_SECRET com pelo menos 32 caracteres no .env')
     if ENVIRONMENT != "production":
         initialize_database()
+    elif EPHEMERAL_SQLITE:
+        from .seed import seed
+        seed(allow_production=True)
     yield
 
 app = FastAPI(

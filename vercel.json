@@ -20,6 +20,7 @@
       "functions": {
         "app/main.py": {
           "maxDuration": 60,
+          "includeFiles": "{alembic.ini,migrations/**,sql/seed_demo.sql}",
           "excludeFiles": "{tests/**,**/tests/**,**/*.test.py,**/test_*.py,fixtures/**,sample-data/**,static/**,assets/**}"
         }
       }

@@ -7,9 +7,9 @@ from .core.security import password_hash
 
 VERSION = 'demo-mvc-v1'
 
-def seed():
-    from .core.config import ENVIRONMENT
-    if ENVIRONMENT == 'production':
+def seed(*, allow_production=False):
+    from .core.config import ENVIRONMENT, EPHEMERAL_SQLITE
+    if ENVIRONMENT == 'production' and not (allow_production and EPHEMERAL_SQLITE):
         raise RuntimeError('Carga demonstrativa bloqueada em produção')
     initialize_database()
     with Session.begin() as db:
