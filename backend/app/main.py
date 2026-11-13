@@ -9,6 +9,21 @@ from .core.config import FRONTEND_URL, CORS_ORIGINS, ENVIRONMENT
 from .core.security import SECRET
 from .controllers import auth, catalog, tickets, orders, dashboard, operations, insights, admin
 
+class ApiPrefixMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] == "http" and (path == "/api" or path.startswith("/api/")):
+            raw_path = scope.get("raw_path", b"")
+            scope = {
+                **scope,
+                "path": path[4:] or "/",
+                "raw_path": raw_path[4:] if raw_path.startswith(b"/api") else raw_path,
+            }
+        await self.app(scope, receive, send)
+
 @asynccontextmanager
 async def lifespan(app):
     if len(SECRET) < 32:
@@ -17,12 +32,18 @@ async def lifespan(app):
         initialize_database()
     yield
 
-app = FastAPI(title='IndusTrack', version='1.0.2', lifespan=lifespan)
+app = FastAPI(
+    title='IndusTrack',
+    version='1.0.2',
+    lifespan=lifespan,
+    root_path="/api" if ENVIRONMENT == "production" else "",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_methods=['*'], allow_headers=['*'],
 )
+app.add_middleware(ApiPrefixMiddleware)
 
 @app.exception_handler(IntegrityError)
 async def integrity_error(request, exc):

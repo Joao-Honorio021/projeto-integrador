@@ -58,6 +58,7 @@ def test_auth_equipment_integrity(client):
     c=client
     assert c.get('/equipamentos').status_code in (401,403)
     assert c.post('/auth/login',json={'email':'admin@industrack.local','senha':'wrong'}).status_code==401
+    assert c.post('/api/auth/login',json={'email':'admin@industrack.local','senha':'Demo@12345'}).status_code==200
     body={'codigo':'TEST-001','nome':'Equipamento teste','setor_id':1}
     assert c.post('/equipamentos',headers=auth(c,'operador'),json=body).status_code==403
     assert c.post('/equipamentos',headers=auth(c,'admin'),json=body).status_code==201
@@ -155,6 +156,7 @@ def test_preventive_notifications_report(client):
     assert client.get('/relatorios/chamados.csv',headers=operator).status_code==403
     assert 'Título' in client.get('/relatorios/chamados.csv',headers=supervisor).text
     assert client.get('/health').status_code==200
+    assert client.get('/api/health').status_code==200
 
 
 def test_admin_access_and_audit(client):
