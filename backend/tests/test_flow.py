@@ -138,6 +138,29 @@ def test_qr_identity_and_access(client, monkeypatch):
     assert client.patch('/equipamentos/'+id,headers=operator,json={'status':'Inativo'}).status_code==403
 
 
+def test_equipment_link_qr_and_edit_survive_restart(client, monkeypatch):
+    from app.services import equipment
+    monkeypatch.setattr(equipment, 'FRONTEND_URL', 'https://industrial.example.org')
+    admin = auth(client, 'admin')
+    item = client.get('/equipamentos', headers=admin).json()[0]
+    path = '/equipamentos/' + item['public_id']
+    assert client.patch(path, headers=admin, json={'localizacao': 'Linha persistente'}).status_code == 200
+    url = equipment.public_url(type('Equipment', (), item)())
+    # Uma nova inicialização deve consultar a mesma identidade e os dados gravados.
+    with TestClient(app) as restarted:
+        operator = auth(restarted, 'operador')
+        response = restarted.get('/api' + path, headers=operator)
+        assert response.status_code == 200
+        assert response.json()['localizacao'] == 'Linha persistente'
+        assert response.json()['public_id'] == item['public_id']
+        assert url.endswith(path)
+        qr = restarted.get('/api' + path + '/qrcode', headers=operator)
+        assert qr.status_code == 200
+        assert qr.headers['content-type'] == 'image/png'
+        assert qr.content.startswith(b'\x89PNG')
+        assert restarted.patch(path, headers=operator, json={'localizacao': 'Proibido'}).status_code == 403
+
+
 def test_preventive_notifications_report(client):
     supervisor=auth(client,'supervisor'); tech=auth(client,'tecnico'); operator=auth(client,'operador')
     body={'equipamento_id':1,'responsavel_id':3,'atividade':'Inspecionar conexões','frequencia_dias':30,'proxima_execucao':'2026-01-01'}

@@ -19,15 +19,10 @@ if ENVIRONMENT != 'production' and len(JWT_SECRET) < 32:
         'Configure um segredo próprio para manter sessões entre reinicializações.'
     )
 CORS_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ORIGINS', FRONTEND_URL).split(',') if origin.strip()]
-EPHEMERAL_SQLITE = (
-    os.getenv('ALLOW_EPHEMERAL_SQLITE', '').lower() == 'true'
-    and DATABASE_URL.startswith('sqlite:////tmp/')
-)
-
 if ENVIRONMENT == 'production':
     from urllib.parse import urlsplit, parse_qs
-    if not DATABASE_URL.startswith(('postgresql://', 'postgresql+psycopg://')) and not EPHEMERAL_SQLITE:
-        raise RuntimeError('Produção requer PostgreSQL')
+    if not DATABASE_URL.startswith(('postgresql://', 'postgresql+psycopg://')):
+        raise RuntimeError('Produção requer PostgreSQL persistente; SQLite temporário invalida os links e QR Codes dos equipamentos.')
     if DATABASE_URL.startswith(('postgresql://', 'postgresql+psycopg://')) and parse_qs(urlsplit(DATABASE_URL).query).get('sslmode', [''])[0] not in ('require','verify-ca','verify-full'):
         raise RuntimeError('Produção requer SSL no PostgreSQL')
     if not FRONTEND_URL.startswith('https://') or any(not origin.startswith('https://') for origin in CORS_ORIGINS):
