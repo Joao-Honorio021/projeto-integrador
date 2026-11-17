@@ -18,10 +18,10 @@ Centraliza equipamentos, chamados e ordens de serviço, com histórico de atendi
 |---|---|
 | Interface | React, TypeScript, Vite e Tailwind CSS |
 | API | Python, FastAPI e Pydantic |
-| Persistência | SQLite, SQL parametrizado e SQLAlchemy |
+| Persistência | PostgreSQL/Supabase, SQLite local, SQL parametrizado e SQLAlchemy |
 | Autenticação | JWT e Argon2 |
 
-A aplicação utiliza uma organização baseada em MVC, com frontend e backend separados. Esta versão é um protótipo local; consulte o [escopo atual](docs/ESCOPO.md) para conhecer as limitações.
+A aplicação utiliza uma organização baseada em MVC, com frontend e backend separados. Esta versão é um protótipo com configuração para Render e Vercel; consulte o [escopo atual](docs/ESCOPO.md) para conhecer as limitações.
 
 ## Início rápido
 
@@ -33,14 +33,14 @@ Requisitos: **Python 3.12+** e **Node.js 20.19+**. Os comandos abaixo usam Bash 
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
+pip install -r requirements-dev.txt
+test -f .env || cp .env.example .env
 python -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Na primeira configuração, substitua o valor de `JWT_SECRET` no `.env` pelo segredo gerado. Preserve o `.env` se já existir.
+Na primeira configuração, substitua o valor de `JWT_SECRET_KEY` no `.env` pelo segredo gerado. Preserve o `.env` se já existir.
 
-**2. Carregue a demonstração e inicie a API:**
+**2. Para demonstração local, defina `DATABASE_URL=sqlite:///./industrack.db` no `.env`, carregue os dados e inicie a API:**
 
 ```bash
 python -m app.seed
@@ -57,7 +57,9 @@ npm run dev
 
 Acesse a [aplicação](http://127.0.0.1:5173) e a [documentação interativa da API](http://127.0.0.1:8000/docs).
 
-Após executar o seed em um banco vazio, use **admin@industrack.local** com a senha **Demo@12345**. Os demais acessos estão no [guia de uso](docs/GUIA_DE_USO.md).
+O exemplo de ambiente aponta para Supabase e exige configuração privada. Para banco remoto, siga [DEPLOY.md](DEPLOY.md): inspecione antes de migrar, sem executar seed. O login sem senha exige `MODO_DEMO=true` em ambiente isolado e permanece desativado por padrão.
+
+Após executar o seed em um banco SQLite vazio, use **admin@industrack.local** com a senha **Demo@12345**. Os demais acessos estão no [guia de uso](docs/GUIA_DE_USO.md).
 
 ## Documentação
 
@@ -74,6 +76,6 @@ A evolução inclui migrações Alembic, QR Code, detalhes de equipamentos, prev
 
 - [Relatório e matriz de requisitos](docs/RELEASE_1_0_2.md)
 - [Preparação para publicação](DEPLOY.md)
-- [Histórico de alterações](CHANGELOG.md)
+- [Relatório da integração Supabase e modo demonstrativo](docs/IMPLEMENTACAO_SUPABASE_DEMO.md)
 
-Para atualizar o banco local, faça uma cópia de segurança e execute `alembic upgrade head` na pasta backend com o ambiente virtual ativo. Em produção, migrações são explícitas; o seed demonstrativo só é permitido no modo temporário de demonstração da Vercel. Os guias históricos devem ser lidos em conjunto com o relatório da versão.
+Para atualizar o banco local, faça uma cópia de segurança e execute `alembic upgrade head` na pasta backend com o ambiente virtual ativo. Em PostgreSQL, migrações são sempre explícitas; o seed demonstrativo é exclusivo de SQLite local de desenvolvimento/teste. Os guias históricos devem ser lidos em conjunto com o relatório da versão.

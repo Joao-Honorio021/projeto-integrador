@@ -89,7 +89,7 @@ def all_records(db, model):
 
 
 def user_by_email(db, email):
-    return one(db, User, 'SELECT * FROM usuarios WHERE email = :email', {'email': email})
+    return one(db, User, 'SELECT * FROM usuarios WHERE lower(email) = :email', {'email': email.strip().lower()})
 
 
 def order_for_ticket(db, id):

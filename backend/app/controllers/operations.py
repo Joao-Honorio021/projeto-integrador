@@ -33,7 +33,7 @@ def plans(u=Depends(current),db=Depends(db_session)):
     allow(u,['administrador','supervisor','tecnico'])
     rows=db.execute(text("SELECT * FROM preventivas WHERE :perfil != 'tecnico' OR responsavel_id=:id ORDER BY proxima_execucao"),{'perfil':u.perfil,'id':u.id}).mappings()
     today=date.today()
-    return [{**p,'status':'Atrasada' if date.fromisoformat(p['proxima_execucao'])<today else 'Próxima do vencimento' if date.fromisoformat(p['proxima_execucao'])<=today+timedelta(days=7) else 'Programada'} for p in rows]
+    return [{**p,'status':'Atrasada' if date.fromisoformat(str(p['proxima_execucao'])[:10])<today else 'Próxima do vencimento' if date.fromisoformat(str(p['proxima_execucao'])[:10])<=today+timedelta(days=7) else 'Programada'} for p in rows]
 
 @router.post('/manutencoes',status_code=201)
 def create_plan(data:PlanInput,u=Depends(current),db=Depends(db_session)):
@@ -50,7 +50,7 @@ def create_plan(data:PlanInput,u=Depends(current),db=Depends(db_session)):
 @router.post('/manutencoes/{id}/executar')
 def execute_plan(id:int,data:Comment,u=Depends(current),db=Depends(db_session)):
     plan=plan_access(db,id,u)
-    next_date=(max(date.today(),date.fromisoformat(plan['proxima_execucao']))+timedelta(days=plan['frequencia_dias'])).isoformat()
+    next_date=(max(date.today(),date.fromisoformat(str(plan['proxima_execucao'])[:10]))+timedelta(days=plan['frequencia_dias'])).isoformat()
     # Compare-and-swap impede duas execuções simultâneas para a mesma ocorrência.
     result=db.execute(text('UPDATE preventivas SET proxima_execucao=:next WHERE id=:id AND proxima_execucao=:old'),{'next':next_date,'old':plan['proxima_execucao'],'id':id})
     if result.rowcount!=1:raise HTTPException(409,'Plano atualizado por outro atendimento. Recarregue.')
@@ -83,7 +83,7 @@ def report(inicio:date|None=None,fim:date|None=None,equipamento_id:int|None=None
     allow(u,['administrador','supervisor'])
     if inicio and fim and inicio>fim:raise HTTPException(422,'Período inválido')
     scope,params=access(u);params.update(equipment_id=equipamento_id,inicio=inicio.isoformat() if inicio else '',fim=fim.isoformat() if fim else '')
-    records=db.execute(text('SELECT t.id,t.titulo,t.equipamento_id,t.status,t.prioridade,t.criado_em FROM chamados t WHERE '+scope+" AND (CAST(:equipment_id AS INTEGER) IS NULL OR t.equipamento_id=:equipment_id) AND (:inicio='' OR substr(t.criado_em,1,10)>=:inicio) AND (:fim='' OR substr(t.criado_em,1,10)<=:fim) ORDER BY t.id"),params)
+    records=db.execute(text('SELECT t.id,t.titulo,t.equipamento_id,t.status,t.prioridade,t.criado_em FROM chamados t WHERE '+scope+" AND (CAST(:equipment_id AS INTEGER) IS NULL OR t.equipamento_id=:equipment_id) AND (:inicio='' OR substr(CAST(t.criado_em AS TEXT),1,10)>=:inicio) AND (:fim='' OR substr(CAST(t.criado_em AS TEXT),1,10)<=:fim) ORDER BY t.id"),params)
     out=StringIO();writer=csv.writer(out);writer.writerow(['Protocolo','Título','Equipamento','Status','Prioridade','Abertura'])
     for row in records:
         writer.writerow(["'"+str(value) if str(value).lstrip().startswith(('=','+','-','@')) else value for value in row])

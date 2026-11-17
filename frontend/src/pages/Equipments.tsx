@@ -27,14 +27,14 @@ export default function Equipments({ user }: { user: User }) {
     }
     return <>
         <div className="intro"><div><span className="eyebrow">GESTÃO DE ATIVOS</span><h2>Equipamentos</h2><p>Identificação, histórico e manutenção de cada ativo.</p></div>{user.perfil === 'administrador' && <button onClick={() => setShow(!show)} aria-expanded={show}><Plus size={16}/>Cadastrar equipamento</button>}</div>
-        {show && <article><h3>Novo equipamento</h3><Form fields={[
+        {show && <article><h3>Novo equipamento</h3>{sectors.err ? <ErrorState message={sectors.err} retry={sectors.reload}/> : !sectors.data ? <Loading/> : !sectors.data.length ? <p>Cadastre um setor antes de cadastrar equipamentos.</p> : <Form fields={[
             { name: 'codigo', label: 'Código', minLength: 1, maxLength: 40 }, { name: 'nome', label: 'Nome', minLength: 2, maxLength: 120 },
             { name: 'setor_id', label: 'Setor', options: sectors.data || [] },
             { name: 'modelo', label: 'Modelo', required: false, maxLength: 120 }, { name: 'fabricante', label: 'Fabricante', required: false, maxLength: 120 },
             { name: 'localizacao', label: 'Localização', required: false, maxLength: 200 }, { name: 'descricao', label: 'Descrição', required: false, area: true, maxLength: 5000 },
             { name: 'criticidade', label: 'Criticidade', options: priorities, value: 'Média' },
             { name: 'status', label: 'Status', options: ['Operacional', 'Em manutenção', 'Inativo'], value: 'Operacional' },
-        ]} onSave={async v => { await api.post('/equipamentos', { ...v, setor_id: Number(v.setor_id) }); setShow(false); reload(); }}/></article>}
+        ]} onSave={async v => { await api.post('/equipamentos', { ...v, setor_id: Number(v.setor_id) }); setShow(false); reload(); }}/> }</article>}
         <div className="filters"><label>Busca<input placeholder="Nome ou código" value={q} onChange={e => filter('q', e.target.value)}/></label>
             <label>Setor<select value={params.get('setor') || ''} onChange={e => filter('setor', e.target.value)}><option value="">Todos</option>{sectors.data?.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
             <label>Status<select value={params.get('status') || ''} onChange={e => filter('status', e.target.value)}><option value="">Todos</option>{['Operacional', 'Em manutenção', 'Inativo'].map(s => <option key={s}>{s}</option>)}</select></label>

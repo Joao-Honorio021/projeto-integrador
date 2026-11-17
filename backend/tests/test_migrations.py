@@ -30,3 +30,20 @@ def test_legacy_migration_preserves_records(tmp_path):
         assert connection.execute(text('SELECT public_id FROM equipamentos')).scalar_one()==identifier
         assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()=='0004'
     engine.dispose()
+
+
+def test_adopt_current_schema_without_revision_keeps_identifiers(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    engine = create_engine('sqlite:///'+str(tmp_path/'adoption.db'))
+    config = Config(str(root/'alembic.ini'))
+    config.set_main_option('script_location', str(root/'migrations'))
+    with engine.begin() as connection:
+        config.attributes['connection'] = connection
+        command.upgrade(config, 'head')
+        connection.execute(text("INSERT INTO setores (id,nome) VALUES (1,'Setor existente')"))
+        connection.execute(text("INSERT INTO equipamentos (id,codigo,nome,modelo,fabricante,localizacao,setor_id,criticidade,status,ativo,public_id,descricao) VALUES (1,'EX-01','Prensa','','','',1,'Alta','Operacional',1,'9dd33bb0-5059-4ee5-8d08-7cda514c8ea4','Preservada')"))
+        before = dict(connection.execute(text('SELECT * FROM equipamentos')).mappings().one())
+        connection.execute(text('DELETE FROM alembic_version'))
+        command.upgrade(config, 'head')
+        assert dict(connection.execute(text('SELECT * FROM equipamentos')).mappings().one()) == before
+    engine.dispose()

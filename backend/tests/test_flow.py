@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 os.environ['DATABASE_URL']='sqlite:///'+str(Path(tempfile.mkdtemp())/'test.db')
 os.environ['JWT_SECRET']='test-only-secret-with-more-than-32-characters'
+os.environ['ENVIRONMENT']='test'
+os.environ['MODO_DEMO']='false'
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +30,10 @@ def auth(c,name):
     assert r.status_code==200
     return {'Authorization':'Bearer '+r.json()['access_token']}
 
-def test_full_workflow(client):
+@pytest.mark.parametrize('demo', [False, True])
+def test_full_workflow(client, monkeypatch, demo):
+    from app.core import config
+    monkeypatch.setattr(config, 'MODO_DEMO', demo)
     c=client; op=auth(c,'operador'); supervisor=auth(c,'supervisor'); tech=auth(c,'tecnico')
     r=c.post('/chamados',headers=op,json={'titulo':'Vazamento de óleo','descricao':'Vazamento na conexão hidráulica','equipamento_id':1})
     assert r.status_code==201
@@ -245,3 +250,97 @@ def test_edit_cancel_and_deadline(client):
     assert client.patch(f'/ordens-servico/{oid}/cancelar',headers=supervisor,json={'mensagem':'Equipamento será substituído'}).status_code==200
     assert client.get(f'/chamados/{tid}',headers=operator).json()['status']=='Cancelado'
     assert client.patch(f'/ordens-servico/{oid}/iniciar',headers=tech).status_code==409
+
+
+@pytest.mark.parametrize('name,role', [('admin','administrador'), ('supervisor','supervisor'), ('tecnico','tecnico'), ('operador','operador')])
+def test_demo_uses_database_profile_without_hash_verification(client, monkeypatch, name, role):
+    from app.core import config
+    from app.services.authentication import password_hash
+    monkeypatch.setattr(config, 'MODO_DEMO', True)
+    def forbidden_verification(*args):
+        raise AssertionError('O fluxo demonstrativo não pode comparar hashes')
+    monkeypatch.setattr(password_hash, 'verify', forbidden_verification)
+    with Session() as db:
+        before = db.execute(text('SELECT senha_hash FROM usuarios ORDER BY id')).scalars().all()
+    response = client.post('/auth/login', json={'email': '  '+name.upper()+'@INDUSTRACK.LOCAL  ', 'senha': 'qualquer senha'})
+    assert response.status_code == 200
+    assert response.json()['usuario']['perfil'] == role
+    headers = {'Authorization': 'Bearer '+response.json()['access_token']}
+    assert client.get('/auth/me', headers=headers).json()['perfil'] == role
+    assert client.get('/auth/config').json() == {'modo_demo': True}
+    assert client.post('/auth/login', json={'email': name+'@industrack.local'}).status_code == 200
+    with Session() as db:
+        assert db.execute(text('SELECT senha_hash FROM usuarios ORDER BY id')).scalars().all() == before
+    if role != 'administrador':
+        assert client.post('/equipamentos', headers=headers, json={'codigo':'DENIED','nome':'Bloqueado','setor_id':1}).status_code == 403
+    monkeypatch.setattr(config, 'MODO_DEMO', False)
+    assert client.get('/auth/me', headers=headers).status_code == 401
+
+
+def test_demo_rejects_unknown_inactive_and_client_profile(client, monkeypatch):
+    from app.core import config
+    monkeypatch.setattr(config, 'MODO_DEMO', True)
+    assert client.post('/auth/login', json={'email':'unknown@example.org'}).status_code == 401
+    with Session.begin() as db:
+        db.execute(text('UPDATE usuarios SET ativo=:active WHERE email=:email'), {'active': False, 'email':'operador@industrack.local'})
+    assert client.post('/auth/login', json={'email':'operador@industrack.local'}).status_code == 401
+    assert client.post('/auth/login', json={'email':'operador2@industrack.local','perfil':'administrador'}).status_code == 422
+    operator = auth(client, 'operador2')
+    assert client.get('/chamados/1', headers=operator).status_code == 403
+
+
+def test_secure_login_handles_legacy_hash_and_preserves_password_spaces(client):
+    from app.core.security import password_hash
+    assert client.get('/auth/config').json() == {'modo_demo': False}
+    assert client.post('/auth/login', json={'email':'admin@industrack.local'}).status_code == 401
+    with Session.begin() as db:
+        db.execute(text('UPDATE usuarios SET senha_hash=:hash WHERE id=1'), {'hash':'legacy-invalid-hash'})
+    assert client.post('/auth/login', json={'email':'admin@industrack.local','senha':'anything'}).status_code == 401
+    password = '  a password with spaces  '
+    with Session.begin() as db:
+        db.execute(text('UPDATE usuarios SET senha_hash=:hash WHERE id=1'), {'hash':password_hash.hash(password)})
+    assert client.post('/auth/login', json={'email':'admin@industrack.local','senha':password}).status_code == 200
+    assert client.post('/auth/login', json={'email':'admin@industrack.local','senha':password.strip()}).status_code == 401
+
+
+def test_unavailable_database_returns_sanitized_503(client, monkeypatch):
+    from app.services import authentication
+    from sqlalchemy.exc import OperationalError
+    def unavailable(*args):
+        raise OperationalError('private SQL', {}, Exception('private-password'))
+    monkeypatch.setattr(authentication, 'user_by_email', unavailable)
+    response = client.post('/auth/login', json={'email':'admin@industrack.local','senha':'x'})
+    assert response.status_code == 503
+    assert 'private' not in response.text
+
+
+def test_inactive_and_missing_equipment(client):
+    admin = auth(client, 'admin')
+    operator = auth(client, 'operador')
+    assert client.get('/equipamentos/not-a-uuid', headers=operator).status_code == 404
+    assert client.get('/equipamentos/00000000-0000-0000-0000-000000000000', headers=operator).status_code == 404
+    assert client.patch('/equipamentos/1', headers=admin, json={'status':'Inativo'}).status_code == 200
+    assert client.post('/chamados', headers=operator, json={'titulo':'Teste inativo','descricao':'Descrição suficiente','equipamento_id':1}).status_code == 409
+
+
+def test_cors_uses_explicit_frontend_origins(client):
+    from app.core.config import CORS_ORIGINS
+    for origin in CORS_ORIGINS:
+        response = client.options('/auth/login', headers={'Origin':origin,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'Content-Type'})
+        assert response.status_code == 200
+        assert response.headers['access-control-allow-origin'] == origin
+    assert 'access-control-allow-origin' not in client.get('/health', headers={'Origin':'https://untrusted.example'}).headers
+
+
+def test_postgres_startup_never_applies_migrations(client, monkeypatch):
+    from app import main
+    from types import SimpleNamespace
+    disposed = []
+    def unexpected_migration():
+        raise AssertionError('PostgreSQL não deve ser migrado no startup')
+    monkeypatch.setattr(main, 'ENVIRONMENT', 'development')
+    monkeypatch.setattr(main, 'initialize_database', unexpected_migration)
+    monkeypatch.setattr(main, 'engine', SimpleNamespace(dialect=SimpleNamespace(name='postgresql'), dispose=lambda: disposed.append(True)))
+    with TestClient(app):
+        pass
+    assert disposed == [True]

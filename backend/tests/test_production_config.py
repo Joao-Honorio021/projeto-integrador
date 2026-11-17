@@ -40,3 +40,33 @@ def test_production_accepts_persistent_postgres_configuration(scheme):
 def test_development_keeps_sqlite_support():
     result = load_config('sqlite:///industrack.db', 'development')
     assert result.returncode == 0, result.stderr
+
+
+def test_production_rejects_demo_mode(monkeypatch):
+    monkeypatch.setenv('MODO_DEMO', 'true')
+    result = load_config('postgresql://test:secret@db.example.org/test?sslmode=require')
+    assert result.returncode != 0
+    assert 'MODO_DEMO é proibido em produção' in result.stderr
+
+
+def test_demo_requires_explicit_environment(monkeypatch):
+    monkeypatch.setenv('MODO_DEMO', 'true')
+    result = load_config('postgresql://test:secret@db.example.org/test?sslmode=require', 'demo')
+    assert result.returncode == 0, result.stderr
+
+
+def test_supabase_defaults_to_ssl():
+    result = load_config('postgresql://postgres:example@db.vcpharygvnbihxmtdsll.supabase.co:5432/postgres')
+    assert result.returncode == 0, result.stderr
+
+
+def test_supabase_explicit_insecure_ssl_rejected():
+    result = load_config('postgresql://postgres:example@db.vcpharygvnbihxmtdsll.supabase.co:5432/postgres?sslmode=disable')
+    assert result.returncode != 0
+    assert 'SSL' in result.stderr
+
+
+def test_invalid_database_url_does_not_leak_secret():
+    result = load_config('sensitive-secret-invalid-url')
+    assert result.returncode != 0
+    assert 'sensitive-secret' not in result.stderr

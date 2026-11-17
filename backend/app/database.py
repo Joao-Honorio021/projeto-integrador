@@ -1,8 +1,11 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from .core.config import DATABASE_URL, BACKEND_DIR
-url = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
-options = {'connect_args': {'check_same_thread': False}} if url.startswith('sqlite:') else {'pool_size': 3, 'max_overflow': 2, 'pool_recycle': 300}
+url = DATABASE_URL
+options = {'connect_args': {'check_same_thread': False}} if url.startswith('sqlite:') else {
+    'pool_size': 3, 'max_overflow': 2, 'pool_recycle': 300, 'pool_timeout': 10,
+    'connect_args': {'connect_timeout': 10, 'prepare_threshold': None},
+}
 engine = create_engine(url, pool_pre_ping=True, hide_parameters=True, **options)
 if engine.dialect.name == 'sqlite':
     @event.listens_for(engine, 'connect')

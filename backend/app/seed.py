@@ -2,15 +2,15 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from sqlalchemy import text
-from .database import initialize_database, Session
+from .database import initialize_database, Session, engine
 from .core.security import password_hash
 
 VERSION = 'demo-mvc-v1'
 
 def seed():
     from .core.config import ENVIRONMENT
-    if ENVIRONMENT == 'production':
-        raise RuntimeError('Carga demonstrativa bloqueada em produção')
+    if ENVIRONMENT not in ('development', 'test') or engine.dialect.name != 'sqlite':
+        raise RuntimeError('Carga demonstrativa permitida somente em SQLite local de desenvolvimento/teste')
     initialize_database()
     with Session.begin() as db:
         if db.execute(text('SELECT 1 FROM seed_versions WHERE version = :version'), {'version': VERSION}).scalar():

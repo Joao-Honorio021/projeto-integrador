@@ -20,4 +20,4 @@ def public_url(equipment):
     url = urlsplit(FRONTEND_URL)
     if url.scheme != 'https' or not url.hostname or url.hostname in ('localhost', '127.0.0.1', '::1') or url.username or url.password or url.query or url.fragment:
         raise HTTPException(503, 'Configure FRONTEND_URL com o domínio HTTPS público para emitir etiquetas.')
-    return FRONTEND_URL.rstrip('/') + '/equipamentos/' + equipment.public_id
+    return FRONTEND_URL.rstrip('/') + '/equipamentos/' + str(equipment.public_id)

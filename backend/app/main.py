@@ -1,11 +1,12 @@
 """Composição da aplicação. Rotas e regras ficam nos controllers."""
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
-from .database import initialize_database
-from .core.config import FRONTEND_URL, CORS_ORIGINS, ENVIRONMENT
+from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as DatabaseTimeoutError
+from .database import initialize_database, engine
+from .core.config import CORS_ORIGINS, ENVIRONMENT
 from .core.security import SECRET
 from .controllers import auth, catalog, tickets, orders, dashboard, operations, insights, admin
 
@@ -28,15 +29,17 @@ class ApiPrefixMiddleware:
 async def lifespan(app):
     if len(SECRET) < 32:
         raise RuntimeError('Configure JWT_SECRET com pelo menos 32 caracteres no .env')
-    if ENVIRONMENT != "production":
+    if ENVIRONMENT in ('development', 'test') and engine.dialect.name == 'sqlite':
         initialize_database()
-    yield
+    try:
+        yield
+    finally:
+        engine.dispose()
 
 app = FastAPI(
     title='IndusTrack',
     version='1.0.2',
     lifespan=lifespan,
-    root_path="/api" if ENVIRONMENT == "production" else "",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -48,6 +51,13 @@ app.add_middleware(ApiPrefixMiddleware)
 @app.exception_handler(IntegrityError)
 async def integrity_error(request, exc):
     return JSONResponse(status_code=409, content={'detail': 'Registro duplicado ou referência inválida.'})
+
+@app.exception_handler(OperationalError)
+@app.exception_handler(DatabaseTimeoutError)
+async def database_unavailable(request, exc):
+    # Não registrar SQL, parâmetros, URL de conexão ou a mensagem bruta do driver.
+    logging.getLogger(__name__).error('Banco indisponível: %s %s (%s)', request.method, request.url.path, type(exc).__name__)
+    return JSONResponse(status_code=503, content={'detail': 'Banco de dados indisponível. Tente novamente em instantes.'})
 
 for controller in (auth, catalog, tickets, orders, dashboard, operations, insights, admin):
     app.include_router(controller.router)

@@ -34,7 +34,8 @@ O token JWT expira em oito horas. O hash da senha é omitido nas respostas públ
 
 | Método | Rota | Finalidade |
 |---|---|---|
-| POST | `/auth/login` | Autenticar com e-mail e senha |
+| GET | `/auth/config` | Consultar se a senha é opcional no ambiente demonstrativo |
+| POST | `/auth/login` | Autenticar a conta ativa; senha obrigatória fora do modo demo |
 | GET | `/auth/me` | Consultar o usuário autenticado |
 | GET | `/usuarios` | Listar usuários; administrador e supervisor |
 | GET | `/setores` | Listar setores |
@@ -102,10 +103,11 @@ A conclusão exige ordem em execução. O servidor registra a data, resolve o ch
 | 404 | Registro não encontrado |
 | 409 | Conflito de integridade ou transição de estado inválida |
 | 422 | Dados de entrada inválidos |
+| 503 | Banco temporariamente indisponível ou domínio de QR não configurado |
 
 Erros de negócio usam o campo `detail`. Erros de validação podem retornar uma lista de campos nesse mesmo atributo. A resposta a uma requisição sem token é controlada pelo componente HTTP Bearer do FastAPI.
 
-As rotas desta página correspondem à implementação atual. Módulos previstos, como preventivas e anexos, não possuem endpoints nesta versão.
+As rotas adicionais de preventivas e notificações estão descritas abaixo. Anexos ainda não possuem endpoint.
 
 ## Novas rotas da versão 1.0.2 em desenvolvimento
 
@@ -121,3 +123,5 @@ As rotas desta página correspondem à implementação atual. Módulos previstos
 - `GET /relatorios/chamados.csv?inicio=AAAA-MM-DD&fim=AAAA-MM-DD`: exportação autorizada.
 
 Consulte [a matriz de requisitos](RELEASE_1_0_2.md) para limites de validação e funcionalidades incompletas.
+
+Com `MODO_DEMO=true`, `/auth/login` aceita senha vazia/omitida e retorna somente o perfil registrado no banco. E-mail inexistente ou conta inativa continuam retornando 401. O modo é desabilitado por padrão e bloqueado em `ENVIRONMENT=production`. Tokens demo deixam de funcionar ao desligar a flag.

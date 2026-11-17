@@ -1,7 +1,7 @@
 """Cadastros administrativos sem exclusão de registros históricos."""
-from typing import Literal
+from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import Field
+from pydantic import Field, StringConstraints
 from ..schemas import Input
 from ..database import db_session
 from ..core.security import current, allow, password_hash
@@ -17,7 +17,7 @@ class UserInput(Input):
     nome: str = Field(min_length=2,max_length=120)
     email: str = Field(pattern=r'^[^\s@]+@[^\s@]+\.[^\s@]+$',max_length=254)
     perfil: Role
-    senha: str = Field(min_length=12,max_length=128)
+    senha: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=12,max_length=128)
 class UserPatch(Input):
     nome: str = Field(min_length=2,max_length=120)
     perfil: Role

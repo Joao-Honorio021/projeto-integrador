@@ -12,7 +12,7 @@ flowchart LR
     C --> S[Regras de atendimento]
     C --> R[Repositório SQL]
     S --> R
-    R --> B[(SQLite)]
+    R --> B[(PostgreSQL / SQLite local)]
 ```
 
 As respostas retornam em JSON. O frontend usa essas respostas para atualizar a interface. O arquivo `views/serializers.py` define representações públicas das entidades, incluindo a exclusão do hash de senha.
@@ -79,7 +79,7 @@ SQLAlchemy gerencia conexões e transações, mas a persistência utiliza comand
 
 As páginas são carregadas sob demanda. O cliente HTTP centraliza token, tempo limite e tratamento de sessão expirada. O hook `useData` cancela requisições anteriores ao trocar a consulta, evitando que uma resposta antiga substitua os dados atuais.
 
-Formulários, badges e estados de carregamento, erro e ausência de dados são compartilhados. O login usa React Hook Form e Zod; os demais formulários combinam validação HTML com a validação Pydantic no servidor. Os contratos recebidos da API são descritos em `types/domain.ts`.
+Formulários, badges e estados de carregamento, erro e ausência de dados são compartilhados. `hooks/useSession.ts` concentra a sessão e `pages/Login.tsx` concentra o login, com React Hook Form e Zod; os demais formulários combinam validação HTML com a validação Pydantic no servidor. Os contratos recebidos da API são descritos em `types/domain.ts`.
 
 ## Convenções para novos recursos
 
@@ -95,8 +95,12 @@ Consulte [instalação](INSTALACAO.md) para executar as verificações e [escopo
 
 ## Evolução 1.0.2
 
-`migrations` introduz Alembic e a adoção incremental do esquema legado. A conexão seleciona SQLite ou PostgreSQL com psycopg por `DATABASE_URL`. Produção exige SSL e não cria tabelas no startup. Os UUIDs são gerados no servidor e persistidos em equipamentos.
+`migrations` introduz Alembic e a adoção incremental do esquema legado. A conexão seleciona SQLite ou PostgreSQL com psycopg por `DATABASE_URL`. Produção exige SSL; nenhum ambiente PostgreSQL cria tabelas no startup. Os UUIDs são gerados no servidor e persistidos em equipamentos.
 
 `services/equipment.py` resolve identificadores e constrói a URL pública de QR. `controllers/operations.py` contém preventivas, notificações e CSV. `services/notifications.py` grava eventos na transação do atendimento. As telas novas usam o mesmo cliente autenticado e não simulam registros.
 
 Esta evolução ainda precisa de homologação PostgreSQL e de interface; o relatório `RELEASE_1_0_2.md` prevalece sobre a descrição do escopo anterior.
+
+## Integração Supabase e demonstração
+
+`services/authentication.py` decide o modo no servidor via `MODO_DEMO`, preservando Argon2 no login normal. Tokens demo são recusados após desligar a flag. O perfil vem do usuário ativo consultado no banco a cada requisição. `config/environment.ts` centraliza a URL HTTP do frontend. `app.check_database` inspeciona o schema sem mutações; `app.repair_sequences` só altera sequências mediante `--apply` explícito. Veja [o relatório atual](IMPLEMENTACAO_SUPABASE_DEMO.md).

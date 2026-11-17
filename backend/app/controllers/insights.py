@@ -34,10 +34,10 @@ def operational(u=Depends(current), db=Depends(db_session)):
         'equipamentos': scalar('SELECT COUNT(*) FROM equipamentos'),
         'equipamentos_manutencao': scalar("SELECT COUNT(*) FROM equipamentos WHERE status='Em manutenção'"),
         'ordens_status': rows('SELECT o.status AS nome, COUNT(*) AS quantidade FROM ordens o JOIN chamados t ON t.id=o.chamado_id WHERE '+scope+' GROUP BY o.status'),
-        'chamados_mes': rows('SELECT substr(t.criado_em,1,7) AS nome, COUNT(*) AS quantidade FROM chamados t WHERE '+scope+' GROUP BY substr(t.criado_em,1,7) ORDER BY nome DESC LIMIT 12')[::-1],
-        'atendimentos_mes': rows("SELECT substr(o.conclusao,1,7) AS nome, COUNT(*) AS quantidade FROM ordens o JOIN chamados t ON t.id=o.chamado_id WHERE "+scope+" AND o.status='Concluída' GROUP BY substr(o.conclusao,1,7) ORDER BY nome DESC LIMIT 12")[::-1],
+        'chamados_mes': rows('SELECT substr(CAST(t.criado_em AS TEXT),1,7) AS nome, COUNT(*) AS quantidade FROM chamados t WHERE '+scope+' GROUP BY substr(CAST(t.criado_em AS TEXT),1,7) ORDER BY nome DESC LIMIT 12')[::-1],
+        'atendimentos_mes': rows("SELECT substr(CAST(o.conclusao AS TEXT),1,7) AS nome, COUNT(*) AS quantidade FROM ordens o JOIN chamados t ON t.id=o.chamado_id WHERE "+scope+" AND o.status='Concluída' GROUP BY substr(CAST(o.conclusao AS TEXT),1,7) ORDER BY nome DESC LIMIT 12")[::-1],
         'equipamentos_ocorrencias': rows('SELECT e.nome, COUNT(*) AS quantidade FROM chamados t JOIN equipamentos e ON e.id=t.equipamento_id WHERE '+scope+' GROUP BY e.id,e.nome ORDER BY quantidade DESC LIMIT 5'),
-        'preventivas_atrasadas': scalar('SELECT COUNT(*) FROM preventivas WHERE proxima_execucao<:today AND '+plan_scope),
+        'preventivas_atrasadas': scalar('SELECT COUNT(*) FROM preventivas WHERE CAST(proxima_execucao AS TEXT)<:today AND '+plan_scope),
         'proximas_preventivas': rows('SELECT id,atividade,proxima_execucao FROM preventivas WHERE '+plan_scope+' ORDER BY proxima_execucao LIMIT 5'),
         'ordens_prioritarias': rows("SELECT o.id,o.status,t.titulo,t.prioridade FROM ordens o JOIN chamados t ON t.id=o.chamado_id WHERE "+scope+" AND o.status NOT IN ('Concluída','Cancelada') ORDER BY CASE t.prioridade WHEN 'Crítica' THEN 0 WHEN 'Alta' THEN 1 ELSE 2 END,o.id LIMIT 5"),
         'atividades': rows('SELECT h.id,h.chamado_id,h.mensagem,h.criado_em,u.nome AS autor FROM historico h JOIN chamados t ON t.id=h.chamado_id JOIN usuarios u ON u.id=h.usuario_id WHERE '+scope+' ORDER BY h.id DESC LIMIT 8'),
@@ -51,11 +51,11 @@ def export(kind: str, inicio: date | None = None, fim: date | None = None, equip
     params = {'inicio': inicio.isoformat() if inicio else '', 'fim': fim.isoformat() if fim else '', 'equipamento': equipamento_id, 'today': date.today().isoformat()}
     equipment_filter = '(CAST(:equipamento AS INTEGER) IS NULL OR e.id=:equipamento)'
     def period(column):
-        return f"(:inicio='' OR substr({column},1,10)>=:inicio) AND (:fim='' OR substr({column},1,10)<=:fim)"
+        return f"(:inicio='' OR substr(CAST({column} AS TEXT),1,10)>=:inicio) AND (:fim='' OR substr(CAST({column} AS TEXT),1,10)<=:fim)"
     reports = {
         'ordens-concluidas': (['OS','Equipamento','Conclusão','Diagnóstico','Solução'], "SELECT o.id,e.nome,o.conclusao,o.diagnostico,o.solucao FROM ordens o JOIN chamados t ON t.id=o.chamado_id JOIN equipamentos e ON e.id=t.equipamento_id WHERE o.status='Concluída' AND "+equipment_filter+' AND '+period('o.conclusao')+' ORDER BY o.id'),
         'equipamentos-falhas': (['Código','Equipamento','Ocorrências'], 'SELECT e.codigo,e.nome,COUNT(*) FROM chamados t JOIN equipamentos e ON e.id=t.equipamento_id WHERE '+equipment_filter+' AND '+period('t.criado_em')+' GROUP BY e.id,e.codigo,e.nome ORDER BY COUNT(*) DESC'),
-        'preventivas-atrasadas': (['Plano','Equipamento','Atividade','Vencimento'], 'SELECT p.id,e.nome,p.atividade,p.proxima_execucao FROM preventivas p JOIN equipamentos e ON e.id=p.equipamento_id WHERE p.proxima_execucao<:today AND '+equipment_filter+' AND '+period('p.proxima_execucao')+' ORDER BY p.proxima_execucao'),
+        'preventivas-atrasadas': (['Plano','Equipamento','Atividade','Vencimento'], 'SELECT p.id,e.nome,p.atividade,p.proxima_execucao FROM preventivas p JOIN equipamentos e ON e.id=p.equipamento_id WHERE CAST(p.proxima_execucao AS TEXT)<:today AND '+equipment_filter+' AND '+period('p.proxima_execucao')+' ORDER BY p.proxima_execucao'),
         'historico-equipamento': (['Código','Equipamento','Chamado','Data','Autor','Evento'], 'SELECT e.codigo,e.nome,t.id,h.criado_em,u.nome,h.mensagem FROM historico h JOIN chamados t ON t.id=h.chamado_id JOIN equipamentos e ON e.id=t.equipamento_id JOIN usuarios u ON u.id=h.usuario_id WHERE '+equipment_filter+' AND '+period('h.criado_em')+' ORDER BY h.id'),
     }
     if kind not in reports: raise HTTPException(404, 'Relatório não encontrado')

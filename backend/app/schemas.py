@@ -1,13 +1,14 @@
 """Validação dos dados recebidos pelos controllers."""
-from typing import Literal
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import date
+from typing import Annotated, Literal
+from pydantic import BaseModel, Field, ConfigDict, StringConstraints
 
 class Input(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
 class Login(Input):
-    email: str
-    senha: str
+    email: str = Field(min_length=3, max_length=254)
+    senha: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(default='', max_length=1024)
 
 class EquipmentInput(Input):
     codigo: str = Field(min_length=1, max_length=40)
@@ -58,6 +59,5 @@ class TicketPatch(Input):
 class Diagnosis(Input):
     diagnostico: str = Field(min_length=3, max_length=10000)
 
-from datetime import date
 class Deadline(Input):
     prazo: date

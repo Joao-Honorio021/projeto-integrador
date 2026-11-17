@@ -1,5 +1,6 @@
 import axios from 'axios';
-export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api', timeout: 15000 });
+import { API_URL } from '../config/environment';
+export const api = axios.create({ baseURL: API_URL, timeout: 15000 });
 api.interceptors.request.use(config => {
     const token = sessionStorage.getItem('token');
     if (token)
