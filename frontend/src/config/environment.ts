@@ -1,2 +1,2 @@
-/** O navegador conhece somente a API HTTP; credenciais PostgreSQL ficam no backend. */
-export const API_URL = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/+$/, '');
+/** API no mesmo domínio; credenciais PostgreSQL pertencem somente ao backend. */
+export const API_URL = '/api';
