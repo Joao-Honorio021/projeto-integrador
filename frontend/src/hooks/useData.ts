@@ -16,10 +16,18 @@ export function useData<T>(url: string) {
                 setData(response.data);
         }
         catch (reason) {
-            if (!axios.isCancel(reason))
+            if (!axios.isCancel(reason) && !controller.signal.aborted) {
+                setData(null);
                 setErr(error(reason));
+            }
         }
     }, [url]);
-    useEffect(() => { setData(null); void reload(); return () => active.current?.abort(); }, [reload]);
+    useEffect(() => {
+        setData(null);
+        void reload();
+        const refresh = () => { void reload(); };
+        window.addEventListener('data:changed', refresh);
+        return () => { active.current?.abort(); window.removeEventListener('data:changed', refresh); };
+    }, [reload]);
     return { data, err, reload };
 }

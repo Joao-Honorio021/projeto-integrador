@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 os.environ['DATABASE_URL']='sqlite:///'+str(Path(tempfile.mkdtemp())/'test.db')
 os.environ['JWT_SECRET']='test-only-secret-with-more-than-32-characters'
+os.environ['JWT_SECRET_KEY']='test-only-secret-with-more-than-32-characters'
 os.environ['ENVIRONMENT']='test'
 os.environ['MODO_DEMO']='false'
 from fastapi.testclient import TestClient
@@ -344,3 +345,191 @@ def test_postgres_startup_never_applies_migrations(client, monkeypatch):
     with TestClient(app):
         pass
     assert disposed == [True]
+
+
+def test_requester_technician_can_follow_created_ticket(client):
+    tech = auth(client, 'tecnico')
+    response = client.post('/chamados', headers=tech, json={
+        'titulo': 'Falha observada pelo técnico', 'descricao': 'Motor com ruído anormal',
+        'equipamento_id': 1,
+    })
+    assert response.status_code == 201
+    tid = response.json()['id']
+    assert client.get(f'/chamados/{tid}', headers=tech).status_code == 200
+    assert tid in [t['id'] for t in client.get('/chamados', headers=tech).json()['items']]
+    assert client.get(f'/chamados/{tid}', headers=auth(client, 'tecnico2')).status_code == 403
+    with Session() as db:
+        assert db.execute(text('SELECT solicitante_id FROM chamados WHERE id=:id'), {'id': tid}).scalar_one() == 3
+        assert db.execute(text('SELECT COUNT(*) FROM historico WHERE chamado_id=:id'), {'id': tid}).scalar_one() == 1
+        assert db.execute(text('SELECT COUNT(*) FROM notificacoes WHERE destino=:path'), {'path': f'/chamados/{tid}'}).scalar_one() == 2
+
+
+@pytest.mark.parametrize('changes', [
+    {'equipamento_id': 0}, {'equipamento_id': -1}, {'categoria': '   '},
+    {'titulo': 'ab'}, {'descricao': 'abcd'}, {'prioridade': 'Urgente'},
+    {'solicitante_id': 7},
+])
+def test_ticket_invalid_payload_is_atomic(client, changes):
+    operator = auth(client, 'operador')
+    with Session() as db:
+        before = {table: db.execute(text(f'SELECT COUNT(*) FROM {table}')).scalar_one()
+                  for table in ('chamados', 'historico', 'notificacoes')}
+    body = {'titulo': 'Falha válida', 'descricao': 'Descrição completa', 'equipamento_id': 1, **changes}
+    assert client.post('/chamados', headers=operator, json=body).status_code == 422
+    with Session() as db:
+        assert before == {table: db.execute(text(f'SELECT COUNT(*) FROM {table}')).scalar_one() for table in before}
+
+
+def test_ticket_notification_failure_rolls_back_ticket_and_history(client, monkeypatch):
+    from app.services import notifications
+    def fail(*args):
+        raise RuntimeError('Falha isolada de notificação')
+    monkeypatch.setattr(notifications, 'managers', fail)
+    with Session() as db:
+        before = db.execute(text('SELECT COUNT(*) FROM chamados')).scalar_one()
+        history = db.execute(text('SELECT COUNT(*) FROM historico')).scalar_one()
+    with pytest.raises(RuntimeError, match='Falha isolada'):
+        client.post('/chamados', headers=auth(client, 'operador'), json={
+            'titulo': 'Falha de transação', 'descricao': 'Não deve persistir parcialmente', 'equipamento_id': 1})
+    with Session() as db:
+        assert db.execute(text('SELECT COUNT(*) FROM chamados')).scalar_one() == before
+        assert db.execute(text('SELECT COUNT(*) FROM historico')).scalar_one() == history
+
+
+def test_inactive_assignee_cannot_receive_new_order(client):
+    supervisor = auth(client, 'supervisor')
+    response = client.post('/chamados', headers=auth(client, 'operador'), json={
+        'titulo': 'Atribuição desatualizada', 'descricao': 'Técnico foi desativado após atribuição', 'equipamento_id': 1})
+    tid = response.json()['id']
+    assert client.patch(f'/chamados/{tid}/atribuir', headers=supervisor, json={'tecnico_id': 3}).status_code == 200
+    assert client.patch('/usuarios/3', headers=auth(client, 'admin'), json={
+        'nome': 'Técnico inativo', 'perfil': 'tecnico', 'ativo': False}).status_code == 200
+    assert client.post('/ordens-servico', headers=supervisor, json={'chamado_id': tid}).status_code == 409
+
+
+@pytest.mark.parametrize('public_id', [None, '', 'null', 'undefined', 'invalid'])
+def test_legacy_equipment_identity_never_generates_invalid_links(client, monkeypatch, public_id):
+    from app.services import equipment
+    from app.models import Equipment
+    monkeypatch.setattr(equipment, 'FRONTEND_URL', 'https://industrial.example.org')
+    with Session.begin() as db:
+        db.execute(text('UPDATE equipamentos SET public_id=:value WHERE id=1'), {'value': public_id})
+    operator = auth(client, 'operador')
+    item = client.get('/equipamentos/1', headers=operator).json()
+    assert equipment.public_url(Equipment(**item)).endswith('/equipamentos/1')
+    results = client.get('/busca', headers=operator, params={'q': item['codigo']}).json()
+    assert any(r['destino'] == '/equipamentos/1' for r in results)
+    assert client.get('/equipamentos/null', headers=operator).status_code == 404
+
+
+def test_search_order_opens_specific_order(client):
+    supervisor = auth(client, 'supervisor')
+    order = client.get('/ordens-servico', headers=supervisor).json()[0]
+    results = client.get('/busca', headers=supervisor, params={'q': f'OS-{order["id"]}'}).json()
+    assert any(r['destino'] == f'/ordens?id={order["id"]}' for r in results)
+
+
+def test_notification_destination_is_checked_against_current_access(client):
+    from app.services.notifications import notify
+    operator = auth(client, 'operador2')
+    with Session.begin() as db:
+        notify(db, 7, 'Chamado sem permissão', '/chamados/1')
+        notify(db, 7, 'Chamado removido', '/chamados/999999')
+        notify(db, 7, 'Link inválido', '/equipamentos/null')
+        notify(db, 7, 'Link externo', 'https://example.org')
+        notify(db, 7, 'Equipamento disponível', '/equipamentos/1')
+    items = client.get('/notificacoes', headers=operator).json()
+    assert next(n for n in items if n['mensagem'] == 'Equipamento disponível')['destino'] == '/equipamentos/1'
+    assert all(n['destino'] is None for n in items if n['mensagem'] != 'Equipamento disponível')
+    assert client.get('/chamados/1', headers=operator).status_code == 403
+
+
+def test_notification_count_includes_older_items_and_read_is_isolated(client):
+    from app.services.notifications import notify
+    operator = auth(client, 'operador')
+    uid = client.get('/auth/me', headers=operator).json()['id']
+    with Session.begin() as db:
+        for i in range(105):
+            notify(db, uid, f'Evento de teste {i}', '/equipamentos/1')
+    assert len(client.get('/notificacoes', headers=operator).json()) == 100
+    assert client.get('/notificacoes/contador', headers=operator).json()['nao_lidas'] == 105
+    nid = client.get('/notificacoes', headers=operator).json()[0]['id']
+    assert client.patch(f'/notificacoes/{nid}/ler', headers=auth(client, 'operador2')).status_code == 404
+    assert client.patch(f'/notificacoes/{nid}/ler', headers=operator).status_code == 200
+    assert client.patch(f'/notificacoes/{nid}/ler', headers=operator).status_code == 200
+    assert client.get('/notificacoes/contador', headers=operator).json()['nao_lidas'] == 104
+    assert client.patch('/notificacoes/ler-todas', headers=operator).status_code == 200
+    assert client.get('/notificacoes/contador', headers=operator).json()['nao_lidas'] == 0
+
+
+def test_equipment_ticket_lifecycle_with_real_generated_ids(client, monkeypatch):
+    from app.services import equipment
+    from app.models import Equipment
+    from uuid import uuid4
+    admin = auth(client, 'admin')
+    operator = auth(client, 'operador')
+    tech = auth(client, 'tecnico')
+    sector = client.post('/setores', headers=admin, json={'nome': 'Setor de regressão'}).json()
+    created = client.post('/equipamentos', headers=admin, json={
+        'codigo': 'REG-' + uuid4().hex[:12], 'nome': 'Equipamento de regressão', 'setor_id': sector['id']})
+    assert created.status_code == 201
+    item = created.json()
+    path = '/equipamentos/' + item['public_id']
+    assert client.get(path, headers=operator).json()['id'] == item['id']
+    assert client.patch(path, headers=admin, json={'localizacao': 'Linha de regressão'}).status_code == 200
+    assert client.get(path, headers=operator).json()['localizacao'] == 'Linha de regressão'
+    assert client.patch(path, headers=admin, json={'setor_id': 999999}).status_code == 404
+    assert client.patch(path, headers=admin, json={'nome': None}).status_code == 422
+    monkeypatch.setattr(equipment, 'FRONTEND_URL', 'https://industrial.example.org')
+    assert equipment.public_url(Equipment(**item)).endswith(path)
+    assert client.get(path + '/qrcode', headers=operator).content.startswith(b'\x89PNG')
+    before = client.get('/dashboard/resumo', headers=operator).json()['total']
+    response = client.post('/chamados', headers=operator, json={
+        'titulo': 'Ocorrência via equipamento', 'descricao': 'Solicitação de inspeção completa', 'equipamento_id': item['id']})
+    assert response.status_code == 201
+    tid = response.json()['id']
+    assert client.get('/dashboard/resumo', headers=operator).json()['total'] == before + 1
+    filtered = client.get('/chamados', headers=operator, params={'equipamento_id': item['id'], 'prioridade': 'Média'}).json()
+    assert [t['id'] for t in filtered['items']] == [tid]
+    assert client.get(path + '/historico', headers=operator).json()['chamados'][0]['id'] == tid
+    tech_id = client.get('/auth/me', headers=tech).json()['id']
+    assert client.patch(f'/chamados/{tid}/atribuir', headers=admin, json={'tecnico_id': tech_id}).status_code == 200
+    response = client.post('/ordens-servico', headers=admin, json={'chamado_id': tid})
+    assert response.status_code == 201
+    oid = response.json()['id']
+    opath = f'/ordens-servico/{oid}'
+    assert client.patch(opath + '/pausar', headers=tech).status_code == 409
+    assert client.patch(opath + '/iniciar', headers=operator).status_code == 403
+    assert client.patch(opath + '/iniciar', headers=tech).status_code == 200
+    first_start = client.get('/ordens-servico', headers=tech).json()[0]['inicio']
+    assert client.patch(opath + '/pausar', headers=tech).status_code == 200
+    assert client.patch(opath + '/iniciar', headers=tech).json()['inicio'] == first_start
+    assert client.patch(opath + '/diagnostico', headers=tech, json={'diagnostico': 'Conexão defeituosa'}).status_code == 200
+    assert client.patch(opath + '/concluir', headers=tech, json={'diagnostico': 'Conexão defeituosa', 'solucao': 'Conexão substituída'}).status_code == 200
+    assert client.get(f'/chamados/{tid}', headers=operator).json()['status'] == 'Resolvido'
+    assert client.get(path + '/ordens', headers=operator).json()[0]['id'] == oid
+    notices = client.get('/notificacoes', headers=operator).json()
+    assert any(n['destino'] == f'/chamados/{tid}' and 'resolvido' in n['mensagem'] for n in notices)
+    assert client.patch(path, headers=admin, json={'status': 'Inativo'}).status_code == 200
+    assert client.post('/chamados', headers=operator, json={
+        'titulo': 'Equipamento desativado', 'descricao': 'Não pode criar um novo chamado', 'equipamento_id': item['id']}).status_code == 409
+    with Session() as db:
+        assert db.execute(text('SELECT setor_id FROM equipamentos WHERE id=:id'), {'id': item['id']}).scalar_one() == sector['id']
+        assert db.execute(text('SELECT status FROM chamados WHERE id=:id'), {'id': tid}).scalar_one() == 'Resolvido'
+        assert db.execute(text('SELECT solucao FROM ordens WHERE id=:id'), {'id': oid}).scalar_one() == 'Conexão substituída'
+
+
+def test_old_assignment_notification_is_unavailable_after_reassignment(client):
+    admin = auth(client, 'admin')
+    tech = auth(client, 'tecnico')
+    other = auth(client, 'tecnico2')
+    tid = client.post('/chamados', headers=auth(client, 'operador'), json={
+        'titulo': 'Reatribuição de atendimento', 'descricao': 'Mudança do responsável pelo atendimento', 'equipamento_id': 1}).json()['id']
+    first_id = client.get('/auth/me', headers=tech).json()['id']
+    other_id = client.get('/auth/me', headers=other).json()['id']
+    assert client.patch(f'/chamados/{tid}/atribuir', headers=admin, json={'tecnico_id': first_id}).status_code == 200
+    assert client.get('/notificacoes', headers=tech).json()[0]['destino'] == f'/chamados/{tid}'
+    assert client.patch(f'/chamados/{tid}/atribuir', headers=admin, json={'tecnico_id': other_id}).status_code == 200
+    assert client.get('/notificacoes', headers=tech).json()[0]['destino'] is None
+    assert client.get(f'/chamados/{tid}', headers=tech).status_code == 403
+    assert client.get('/notificacoes', headers=other).json()[0]['destino'] == f'/chamados/{tid}'

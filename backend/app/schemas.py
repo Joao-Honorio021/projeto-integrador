@@ -24,16 +24,16 @@ class EquipmentInput(Input):
 class TicketInput(Input):
     titulo: str = Field(min_length=3, max_length=160)
     descricao: str = Field(min_length=5, max_length=10000)
-    equipamento_id: int
-    categoria: str = 'Falha mecânica'
+    equipamento_id: int = Field(gt=0, le=2147483647)
+    categoria: str = Field(default='Falha mecânica', min_length=1, max_length=120)
     prioridade: Literal['Baixa', 'Média', 'Alta', 'Crítica'] = 'Média'
 
 class Assign(Input):
-    tecnico_id: int
+    tecnico_id: int = Field(gt=0, le=2147483647)
     prioridade: Literal['Baixa', 'Média', 'Alta', 'Crítica'] = 'Média'
 
 class OrderInput(Input):
-    chamado_id: int
+    chamado_id: int = Field(gt=0, le=2147483647)
 
 class Complete(Input):
     diagnostico: str = Field(min_length=3, max_length=10000)

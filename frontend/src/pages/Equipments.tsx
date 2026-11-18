@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Box, Plus } from 'lucide-react';
+import { equipmentPath } from '../services/navigation';
 import { api } from '../services/api';
 import { useData } from '../hooks/useData';
 import { Badge } from '../components/Badge';
@@ -41,7 +42,7 @@ export default function Equipments({ user }: { user: User }) {
             <label>Criticidade<select value={params.get('criticidade') || ''} onChange={e => filter('criticidade', e.target.value)}><option value="">Todas</option>{priorities.map(s => <option key={s}>{s}</option>)}</select></label>
         </div>
         {err ? <ErrorState message={err} retry={reload}/> : !data ? <Loading/> : !filtered.length ? <EmptyState title="Nenhum equipamento encontrado" description="Revise os filtros ou cadastre um equipamento."/> : <>
-            <div className="equipment-grid">{filtered.slice((currentPage - 1) * 12, currentPage * 12).map(e => <article key={e.id}><Box/><small>{e.codigo}</small><h3><Link to={'/equipamentos/' + (e.public_id || e.id)}>{e.nome}</Link></h3><p>{sectors.data?.find(s => s.id === e.setor_id)?.nome} · {e.localizacao || 'Localização não informada'}</p><Badge>{e.status}</Badge> <Badge>{e.criticidade}</Badge><p><Link to={'/equipamentos/' + (e.public_id || e.id)}>Ver detalhes e QR Code →</Link></p></article>)}</div>
+            <div className="equipment-grid">{filtered.slice((currentPage - 1) * 12, currentPage * 12).map(e => <article key={e.id}><Box/><small>{e.codigo}</small><h3>{equipmentPath(e) ? <Link to={equipmentPath(e)!}>{e.nome}</Link> : e.nome}</h3><p>{sectors.data?.find(s => s.id === e.setor_id)?.nome} · {e.localizacao || 'Localização não informada'}</p><Badge>{e.status}</Badge> <Badge>{e.criticidade}</Badge><p>{equipmentPath(e) ? <Link to={equipmentPath(e)!}>Ver detalhes e QR Code →</Link> : <span role="alert">Identificador indisponível</span>}</p></article>)}</div>
             <div className="pagination"><span>{filtered.length} equipamentos</span><button disabled={currentPage === 1} onClick={() => filter('page', String(currentPage - 1))}>Anterior</button><span>{currentPage} de {totalPages}</span><button disabled={currentPage === totalPages} onClick={() => filter('page', String(currentPage + 1))}>Próxima</button></div>
         </>}
     </>;

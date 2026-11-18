@@ -1,7 +1,7 @@
 """Regras de atendimento e transações atômicas de ordens de serviço."""
 from fastapi import HTTPException
 from ..core.security import allow
-from ..models import Ticket, Order, now
+from ..models import Ticket, Order, User, now
 from ..repositories.sql_repository import insert, save, visible_orders
 from ..schemas import OrderInput, Complete
 from ..views.serializers import public
@@ -15,6 +15,9 @@ def create_order(data: OrderInput, u, db):
     t = ticket(db, data.chamado_id, u)
     if not t.tecnico_id or t.status in ('Resolvido', 'Cancelado'):
         raise HTTPException(409, 'Atribua um técnico a um chamado ativo')
+    technician = get(db, User, t.tecnico_id)
+    if not technician.ativo or technician.perfil != 'tecnico':
+        raise HTTPException(409, 'Atribua um técnico ativo antes de criar a ordem')
     o = insert(db, Order, chamado_id=t.id, tecnico_id=t.tecnico_id)
     log(db, t, u, 'Ordem de serviço criada')
     from .notifications import notify

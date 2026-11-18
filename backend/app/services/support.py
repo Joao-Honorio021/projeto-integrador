@@ -9,7 +9,7 @@ def get(db, model, id):
     return obj
 
 def visible(t, u):
-    return u.perfil in ('administrador', 'supervisor') or (u.perfil == 'operador' and t.solicitante_id == u.id) or (u.perfil == 'tecnico' and t.tecnico_id == u.id)
+    return u.perfil in ('administrador', 'supervisor') or (u.perfil in ('operador', 'tecnico') and t.solicitante_id == u.id) or (u.perfil == 'tecnico' and t.tecnico_id == u.id)
 
 def ticket(db, id, u):
     t = get(db, Ticket, id)

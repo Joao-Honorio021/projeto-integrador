@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Factory, LayoutDashboard, Headphones, Wrench, Box, LogOut, ScanLine, CalendarDays, Bell, ChartNoAxesCombined, PanelLeftClose, Menu, Users, Building2 } from 'lucide-react';
 import { api, error } from '../services/api';
+import { useData } from '../hooks/useData';
 import type { User } from '../types/domain';
 const sections = [
     { title:'Principal', items:[['/','Dashboard',LayoutDashboard],['/equipamentos','Equipamentos',Box],['/chamados','Chamados',Headphones],['/ordens','Ordens de serviço',Wrench],['/scanner','Ler QR Code',ScanLine]] },
@@ -10,10 +11,12 @@ const sections = [
 ] satisfies {title:string;items:[string,string,typeof Box][]}[];
 export function AppShell({user,onLogout,children}:{user:User;onLogout:()=>void;children:ReactNode}) {
     const [collapsed,setCollapsed]=useState(false), [mobile,setMobile]=useState(false), [q,setQ]=useState('');
-    const [results,setResults]=useState<{titulo:string;destino:string}[]>([]), [searchError,setSearchError]=useState(''), [searching,setSearching]=useState(false), [unread,setUnread]=useState(0);
+    const [results,setResults]=useState<{titulo:string;destino:string}[]>([]), [searchError,setSearchError]=useState(''), [searching,setSearching]=useState(false);
+    const {data: count, err: countError, reload: reloadCount} = useData<{nao_lidas:number}>('/notificacoes/contador');
+    const unread = count?.nao_lidas ?? 0;
     const location=useLocation();
     useEffect(()=>{setMobile(false);setQ('');setResults([])},[location.pathname]);
-    useEffect(()=>{const controller=new AbortController();api.get('/notificacoes/contador',{signal:controller.signal}).then(r=>setUnread(r.data.nao_lidas)).catch(()=>{});return()=>controller.abort()},[location.pathname]);
+    useEffect(()=>{void reloadCount()},[location.pathname,reloadCount]);
     useEffect(()=>{
         if(q.trim().length<2){setResults([]);setSearching(false);return}
         const controller=new AbortController();setSearching(true);setSearchError('');
@@ -27,7 +30,7 @@ export function AppShell({user,onLogout,children}:{user:User;onLogout:()=>void;c
         <aside id="navigation"><Link to="/" className="brand"><Factory/><span>IndusTrack <small>v1.0.2</small></span></Link><nav aria-label="Navegação principal">{sections.map(section=><section key={section.title}>{section.items.some(([p])=>permitted(p))&&<small className="nav-group">{section.title}</small>}{section.items.filter(([p])=>permitted(p)).map(([path,label,Icon])=><NavLink end={path==='/'} key={path} to={path} title={label}><Icon size={19}/><span>{label}</span></NavLink>)}</section>)}</nav><button className="collapse-control secondary" onClick={()=>setCollapsed(!collapsed)} aria-label={collapsed?'Expandir navegação':'Recolher navegação'}><PanelLeftClose size={18}/><span>Recolher</span></button></aside>
         <div className="workspace"><header><button className="mobile-menu" onClick={()=>setMobile(!mobile)} aria-controls="navigation" aria-expanded={mobile} aria-label="Abrir navegação"><Menu size={20}/></button><div className="breadcrumb"><Link to="/">IndusTrack</Link><span> / {title}</span></div>
             <div className="global-search"><label className="sr-only" htmlFor="global-search">Buscar equipamentos, chamados e ordens</label><input id="global-search" placeholder="Buscar na operação…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')setQ('')}}/>{q.trim().length>=2&&<div className="search-results" role="region" aria-label="Resultados da busca">{searching?<p role="status">Buscando…</p>:searchError?<p role="alert">{searchError}</p>:results.length?results.map((r,i)=><Link key={r.destino+i} to={r.destino} onClick={()=>setQ('')}>{r.titulo}</Link>):<p>Nenhum resultado acessível.</p>}</div>}</div>
-            <Link to="/notificacoes" className="notification-link" aria-label={`Notificações: ${unread} não lidas`}><Bell size={20}/>{unread>0&&<b>{unread>99?'99+':unread}</b>}</Link>
+            <Link to="/notificacoes" className="notification-link" title={countError || undefined} aria-label={countError ? 'Notificações: contagem indisponível' : `Notificações: ${unread} não lidas`}><Bell size={20}/>{countError ? <b>!</b> : unread>0&&<b>{unread>99?'99+':unread}</b>}</Link>
             <details className="user-menu"><summary><span className="avatar">{user.nome.split(' ').map(n=>n[0]).slice(0,2).join('')}</span><span className="user-name">{user.nome}<small>{user.perfil}</small></span></summary><div className="user-menu-content"><b>{user.nome}</b><p>{user.email}</p><button onClick={onLogout}><LogOut size={16}/>Sair da conta</button></div></details>
         </header><main id="conteudo">{children}</main></div>
     </div>;

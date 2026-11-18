@@ -44,7 +44,8 @@ def create_plan(data:PlanInput,u=Depends(current),db=Depends(db_session)):
     values=data.model_dump(mode='json')
     id=db.execute(text('INSERT INTO preventivas (equipamento_id,responsavel_id,atividade,descricao,frequencia_dias,proxima_execucao) VALUES (:equipamento_id,:responsavel_id,:atividade,:descricao,:frequencia_dias,:proxima_execucao) RETURNING id'),values).scalar_one()
     from ..services.notifications import notify
-    notify(db,technician.id,'Plano preventivo atribuído: '+data.atividade,f"/equipamentos/{equipment.public_id or equipment.id}")
+    from ..services.equipment import public_identifier
+    notify(db,technician.id,'Plano preventivo atribuído: '+data.atividade,f"/equipamentos/{public_identifier(equipment)}")
     db.commit();return {'id':id,**values}
 
 @router.post('/manutencoes/{id}/executar')
@@ -64,9 +65,10 @@ def executions(id:int,u=Depends(current),db=Depends(db_session)):
 
 @router.get('/notificacoes')
 def notifications(u=Depends(current),db=Depends(db_session)):
-    from ..services.notifications import preventive_reminders
+    from ..services.notifications import preventive_reminders, accessible_destination
     preventive_reminders(db,u)
-    return [dict(r) for r in db.execute(text('SELECT * FROM notificacoes WHERE usuario_id=:id ORDER BY id DESC LIMIT 100'),{'id':u.id}).mappings()]
+    rows = db.execute(text('SELECT * FROM notificacoes WHERE usuario_id=:id ORDER BY id DESC LIMIT 100'),{'id':u.id}).mappings().all()
+    return [{**r, 'destino': accessible_destination(db, u, r)} for r in rows]
 
 @router.patch('/notificacoes/ler-todas')
 def read_all(u=Depends(current),db=Depends(db_session)):

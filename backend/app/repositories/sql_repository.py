@@ -45,7 +45,7 @@ def save(db, obj):
 def access(user):
     return """(:perfil IN ('administrador', 'supervisor')
         OR (:perfil = 'operador' AND t.solicitante_id = :usuario_id)
-        OR (:perfil = 'tecnico' AND t.tecnico_id = :usuario_id))""", {
+        OR (:perfil = 'tecnico' AND (t.tecnico_id = :usuario_id OR t.solicitante_id = :usuario_id)))""", {
         'perfil': user.perfil, 'usuario_id': user.id,
     }
 

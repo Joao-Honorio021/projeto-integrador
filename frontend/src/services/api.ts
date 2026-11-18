@@ -7,7 +7,12 @@ api.interceptors.request.use(config => {
         config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
-api.interceptors.response.use(response => response, reason => {
+api.interceptors.response.use(response => {
+    if (['post', 'patch', 'put', 'delete'].includes(response.config.method || '') && !response.config.url?.startsWith('/auth/')) {
+        window.dispatchEvent(new Event('data:changed'));
+    }
+    return response;
+}, reason => {
     if (reason.response?.status === 401 && !reason.config?.url?.includes('/auth/login')) {
         sessionStorage.removeItem('token');
         window.dispatchEvent(new Event('auth:expired'));
