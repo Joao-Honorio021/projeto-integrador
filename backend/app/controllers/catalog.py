@@ -70,7 +70,7 @@ def qr(identifier: str, u=Depends(current), db=Depends(db_session)):
     equipment = resolve(db, identifier)
     buffer = BytesIO()
     qrcode.make(public_url(equipment)).save(buffer, format='PNG')
-    return Response(buffer.getvalue(), media_type='image/png', headers={'Content-Disposition': f'attachment; filename="industrack-{equipment.public_id}.png"', 'Cache-Control': 'private, no-store'})
+    return Response(buffer.getvalue(), media_type='image/png', headers={'Content-Disposition': f'attachment; filename="industrack-{equipment.public_id or equipment.id}.png"', 'Cache-Control': 'private, no-store'})
 
 @router.get('/equipamentos/{identifier}/ordens')
 def equipment_orders(identifier: str, u=Depends(current), db=Depends(db_session)):

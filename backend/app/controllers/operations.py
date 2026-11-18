@@ -44,7 +44,7 @@ def create_plan(data:PlanInput,u=Depends(current),db=Depends(db_session)):
     values=data.model_dump(mode='json')
     id=db.execute(text('INSERT INTO preventivas (equipamento_id,responsavel_id,atividade,descricao,frequencia_dias,proxima_execucao) VALUES (:equipamento_id,:responsavel_id,:atividade,:descricao,:frequencia_dias,:proxima_execucao) RETURNING id'),values).scalar_one()
     from ..services.notifications import notify
-    notify(db,technician.id,'Plano preventivo atribuído: '+data.atividade,'/preventivas')
+    notify(db,technician.id,'Plano preventivo atribuído: '+data.atividade,f"/equipamentos/{equipment.public_id or equipment.id}")
     db.commit();return {'id':id,**values}
 
 @router.post('/manutencoes/{id}/executar')

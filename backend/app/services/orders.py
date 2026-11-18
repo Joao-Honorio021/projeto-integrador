@@ -18,7 +18,7 @@ def create_order(data: OrderInput, u, db):
     o = insert(db, Order, chamado_id=t.id, tecnico_id=t.tecnico_id)
     log(db, t, u, 'Ordem de serviço criada')
     from .notifications import notify
-    notify(db, t.tecnico_id, f'Ordem OS-{o.id} atribuída', '/ordens')
+    notify(db, t.tecnico_id, f'Ordem OS-{o.id} atribuída', f'/ordens?id={o.id}')
     db.commit()
     return public(o)
 
@@ -92,5 +92,5 @@ def cancel(id,data,u,db):
     o.status='Cancelada';t.status='Cancelado';save(db,o);save(db,t)
     log(db,t,u,'Ordem cancelada: '+data.mensagem)
     from .notifications import notify
-    for uid in {t.solicitante_id,o.tecnico_id}:notify(db,uid,f'Ordem OS-{id} cancelada',f'/chamados/{t.id}')
+    for uid in {t.solicitante_id,o.tecnico_id}:notify(db,uid,f'Ordem OS-{id} cancelada',f'/ordens?id={id}')
     db.commit();return public(o)

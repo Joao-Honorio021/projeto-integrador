@@ -11,7 +11,7 @@ export interface Sector {
     nome: string;
 }
 export interface Equipment {
-    public_id: string;
+    public_id: string | null;
     modelo: string;
     fabricante: string;
     descricao: string | null;

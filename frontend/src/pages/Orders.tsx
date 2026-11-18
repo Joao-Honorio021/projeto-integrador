@@ -11,7 +11,8 @@ export default function Orders({user}:{user:User}) {
     const [params,setParams]=useSearchParams();
     const [selected,setSelected]=useState<number|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
     const manager=['administrador','supervisor'].includes(user.perfil);
-    const filtered=data?.filter(o=>(!params.get('status')||o.status===params.get('status'))&&(!params.get('q')||String(o.id).includes(params.get('q')!)))||[];
+    const selectedId=params.get('id');
+    const filtered=data?.filter(o=>(selectedId?String(o.id)===selectedId:(!params.get('q')||String(o.id).includes(params.get('q')!)))&&(!params.get('status')||o.status===params.get('status')))||[];
     async function action(id:number,path:string){setBusy(true);setMessage('');try{await api.patch(`/ordens-servico/${id}/${path}`);reload()}catch(reason){setMessage(error(reason))}finally{setBusy(false)}}
     function filter(key:string,value:string){setParams(previous=>{const next=new URLSearchParams(previous);if(value)next.set(key,value);else next.delete(key);return next},{replace:true})}
     return <><h2>Ordens de serviço</h2><p>Acompanhe prazos, registre o diagnóstico e conclua o atendimento.</p>

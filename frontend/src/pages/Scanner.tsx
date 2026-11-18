@@ -11,7 +11,7 @@ export default function Scanner(){
  async function start(){stop();const current=++generation.current;setMessage('');setRunning(true);let resolving=false;
  try{const reader=new BrowserQRCodeReader();const streamControls=await reader.decodeFromVideoDevice(device||undefined,video.current!,async result=>{
  if(!result||resolving||current!==generation.current)return;resolving=true;
- try{const url=new URL(result.getText());const match=url.pathname.match(/^\/equipamentos\/([0-9a-f-]{36})\/?$/i);
+ try{const url=new URL(result.getText());const match=url.pathname.match(/^\/equipamentos\/([0-9a-f-]{36}|[1-9][0-9]*)\/?$/i);
  if(url.origin!==window.location.origin||!match||url.search||url.hash)throw new Error('Código de outro sistema ou conteúdo inválido.');
  await api.get('/equipamentos/'+match[1]);stop();navigate(url.pathname);
  }catch(reason){setMessage(reason instanceof Error&&!('response' in reason)?reason.message:error(reason));resolving=false}

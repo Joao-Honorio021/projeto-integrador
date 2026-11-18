@@ -13,9 +13,10 @@ def preventive_reminders(db, user):
     from datetime import date, timedelta
     if user.perfil not in ('administrador','supervisor','tecnico'):return
     today=date.today();limit=(today+timedelta(days=7)).isoformat()
-    plans=db.execute(text("SELECT id,atividade,proxima_execucao FROM preventivas WHERE CAST(proxima_execucao AS TEXT)<=:limit AND (:role IN ('administrador','supervisor') OR responsavel_id=:user)"),{'limit':limit,'role':user.perfil,'user':user.id}).mappings()
+    plans=db.execute(text("SELECT p.id,p.atividade,p.proxima_execucao,e.id AS equipamento_id,e.public_id FROM preventivas p JOIN equipamentos e ON e.id=p.equipamento_id WHERE CAST(p.proxima_execucao AS TEXT)<=:limit AND (:role IN ('administrador','supervisor') OR p.responsavel_id=:user)"),{'limit':limit,'role':user.perfil,'user':user.id}).mappings()
     for plan in plans:
         stage='atrasada' if str(plan['proxima_execucao'])[:10]<today.isoformat() else 'próxima'
         event=f"preventiva:{plan['id']}:{plan['proxima_execucao']}:{stage}"
-        db.execute(text('INSERT INTO notificacoes (usuario_id,mensagem,destino,criado_em,lida,evento) VALUES (:user,:message,:destination,:now,:read,:event) ON CONFLICT (usuario_id,evento) DO NOTHING'),{'user':user.id,'message':f"Preventiva {stage}: {plan['atividade']} ({plan['proxima_execucao']})",'destination':'/preventivas','now':now(),'read':False,'event':event})
+        destination=f"/equipamentos/{plan['public_id'] or plan['equipamento_id']}"
+        db.execute(text('INSERT INTO notificacoes (usuario_id,mensagem,destino,criado_em,lida,evento) VALUES (:user,:message,:destination,:now,:read,:event) ON CONFLICT (usuario_id,evento) DO NOTHING'),{'user':user.id,'message':f"Preventiva {stage}: {plan['atividade']} ({plan['proxima_execucao']})",'destination':destination,'now':now(),'read':False,'event':event})
     db.commit()

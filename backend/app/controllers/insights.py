@@ -16,7 +16,7 @@ def search(q: str = Query(min_length=2, max_length=100), u=Depends(current), db=
     scope, params = access(u)
     params['pattern'] = '%' + q.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
     params['q'] = q.removeprefix('CH-').removeprefix('OS-').lstrip('0') or '0'
-    equipment = db.execute(text("SELECT nome AS titulo, '/equipamentos/' || public_id AS destino FROM equipamentos WHERE lower(nome) LIKE lower(:pattern) ESCAPE '!' OR lower(codigo) LIKE lower(:pattern) ESCAPE '!' ORDER BY nome LIMIT 8"), params).mappings()
+    equipment = db.execute(text("SELECT nome AS titulo, '/equipamentos/' || COALESCE(NULLIF(CAST(public_id AS TEXT), ''), CAST(id AS TEXT)) AS destino FROM equipamentos WHERE lower(nome) LIKE lower(:pattern) ESCAPE '!' OR lower(codigo) LIKE lower(:pattern) ESCAPE '!' ORDER BY nome LIMIT 8"), params).mappings()
     tickets = db.execute(text("SELECT t.titulo, '/chamados/' || CAST(t.id AS TEXT) AS destino FROM chamados t WHERE " + scope + " AND (lower(t.titulo) LIKE lower(:pattern) ESCAPE '!' OR CAST(t.id AS TEXT)=:q) ORDER BY t.id DESC LIMIT 8"), params).mappings()
     orders = db.execute(text("SELECT 'OS-' || CAST(o.id AS TEXT) AS titulo, '/ordens' AS destino FROM ordens o JOIN chamados t ON t.id=o.chamado_id WHERE " + scope + " AND CAST(o.id AS TEXT)=:q LIMIT 8"), params).mappings()
     return [dict(r) for r in equipment] + [dict(r) for r in tickets] + [dict(r) for r in orders]
